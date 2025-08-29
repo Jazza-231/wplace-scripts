@@ -1,6 +1,10 @@
 import path from "path";
 import { fork } from "child_process";
 
+const SECOND = 1000;
+const MINUTE = 60 * SECOND;
+const HOUR = 60 * MINUTE;
+
 const basePath = import.meta.dirname;
 const pullScript = path.join(basePath, "pull.ts");
 const splits = 6;
@@ -113,15 +117,24 @@ function parseEtaString(etaStr: string): number {
 	return totalMs;
 }
 
-function formattedTime(ms: number): string {
-	const SECOND = 1000;
-	const MINUTE = 60 * SECOND;
-	const HOUR = 60 * MINUTE;
-
+function formattedTime(ms: number) {
 	if (ms < SECOND) return `${ms.toFixed(0)}ms`;
-	if (ms < MINUTE) return `${(ms / SECOND).toFixed(0)}s`;
-	if (ms < HOUR) return `${(ms / MINUTE).toFixed(0)}m`;
-	return `${(ms / HOUR).toFixed(0)}h`;
+
+	if (ms < MINUTE) {
+		const s = Math.floor(ms / SECOND);
+		const ds = Math.floor((ms % SECOND) / 100); // 10ths of a second
+		return ds ? `${s}.${ds}s` : `${s}s`;
+	}
+
+	if (ms < HOUR) {
+		const m = Math.floor(ms / MINUTE);
+		const s = Math.floor((ms % MINUTE) / SECOND);
+		return s ? `${m}m ${s}s` : `${m}m`;
+	}
+
+	const h = Math.floor(ms / HOUR);
+	const m = Math.floor((ms % HOUR) / MINUTE);
+	return m ? `${h}h ${m}m` : `${h}h`;
 }
 
 setInterval(() => {

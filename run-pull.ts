@@ -3,10 +3,10 @@ import { fork } from "child_process";
 
 const basePath = import.meta.dirname;
 const pullScript = path.join(basePath, "pull.ts");
-const splits = 4;
+const splits = 6;
 
-const minX = 1150,
-	maxX = 1160,
+const minX = 0,
+	maxX = 2047,
 	minY = 0,
 	maxY = 2047;
 

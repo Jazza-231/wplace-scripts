@@ -1,4 +1,5 @@
 import path from "path";
+import fs from "fs";
 import { fork } from "child_process";
 
 const SECOND = 1000;
@@ -7,12 +8,18 @@ const HOUR = 60 * MINUTE;
 
 const basePath = import.meta.dirname;
 const pullScript = path.join(basePath, "pull.ts");
-const splits = 6;
+const splits = 8;
 
 const minX = 0,
 	maxX = 2047,
 	minY = 0,
 	maxY = 2047;
+
+const logDir = path.relative(basePath, path.join(basePath, "..", "logs"));
+if (!fs.existsSync(logDir)) {
+	fs.mkdirSync(logDir, { recursive: true });
+}
+const startTime = Date.now();
 
 interface ChildStats {
 	perSecond: number;
@@ -93,6 +100,32 @@ for (let i = 0; i < splits; i++) {
 	child.on("exit", (code) => {
 		console.log(`Child ${i} exited with code ${code}`);
 		childStats.delete(i);
+
+		// When all children are done
+		if (childStats.size === 0) {
+			const endTime = Date.now();
+			const elapsed = endTime - startTime;
+
+			const logData = {
+				started: new Date(startTime).toISOString(),
+				finished: new Date(endTime).toISOString(),
+				elapsedMs: elapsed,
+				elapsedFormatted: formattedTime(elapsed),
+				splits,
+				minX,
+				maxX,
+				minY,
+				maxY,
+			};
+
+			const logFile = path.join(
+				logDir,
+				`run-${new Date().toISOString().replace(/[:.]/g, "-")}.json`,
+			);
+
+			fs.writeFileSync(logFile, JSON.stringify(logData, null, 2));
+			console.log(`✅ Finished. Log written to ${logFile}`);
+		}
 	});
 }
 

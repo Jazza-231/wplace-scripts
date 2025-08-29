@@ -11,7 +11,7 @@ const pullScript = path.join(basePath, "pull.ts");
 const splits = 10;
 
 const minX = 0,
-	maxX = 100,
+	maxX = 2047,
 	minY = 0,
 	maxY = 2047;
 

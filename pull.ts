@@ -21,11 +21,28 @@ const proxyListURL =
 const basePath = "C:/Users/jazza/Downloads/wplace/";
 const wPlaceURL = "https://backend.wplace.live/files/s0/tiles/{x}/{y}.png";
 
+const argsArr = process.argv.slice(2);
+
+function parseArg(arg: string) {
+	const argRegex = /^--(\w+)=(.+)$/;
+	if (!argRegex.test(arg)) return null;
+
+	const argName = arg.replace(argRegex, "$1");
+	const argValue = +arg.replace(argRegex, "$2");
+
+	return { [argName]: argValue };
+}
+
+const args = argsArr
+	.map(parseArg)
+	.filter((a) => a)
+	.reduce((a, b) => ({ ...a, ...b }), {});
+
 // INCLUSIVE
-const minX = 0;
-const maxX = 4;
-const minY = 0;
-const maxY = 2047;
+const minX = args?.minX ?? 0;
+const maxX = args?.maxX ?? 2047;
+const minY = args?.minY ?? 0;
+const maxY = args?.maxY ?? 2047;
 
 const concurrency = 800;
 const minTime = 0;

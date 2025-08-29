@@ -8,10 +8,10 @@ const HOUR = 60 * MINUTE;
 
 const basePath = import.meta.dirname;
 const pullScript = path.join(basePath, "pull.ts");
-const splits = 8;
+const splits = 10;
 
 const minX = 0,
-	maxX = 2047,
+	maxX = 100,
 	minY = 0,
 	maxY = 2047;
 

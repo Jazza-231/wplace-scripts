@@ -92,7 +92,7 @@ setInterval(() => {
 
 /* -------------------- GET PROXIES -------------------- */
 
-async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
+async function fetchWithRetry(url: string, maxRetries = 10): Promise<Response> {
 	for (let attempt = 1; attempt <= maxRetries; attempt++) {
 		try {
 			console.log(`Fetching proxies (attempt ${attempt}/${maxRetries})...`);

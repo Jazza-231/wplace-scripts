@@ -12,6 +12,8 @@ import { fetch, request, ProxyAgent } from "undici";
 import fs from "fs";
 import path from "path";
 import Bottleneck from "bottleneck";
+import { pipeline } from "stream/promises";
+import { Readable } from "stream";
 
 /* -------------------- GLOBALS -------------------- */
 const proxyListURL =
@@ -93,20 +95,31 @@ function getRandomProxy() {
 	return proxies[randomIndex];
 }
 
-function wPlaceURLToPath(url: string) {
-	const urlRegex = /https:\/\/backend\.wplace\.live\/files\/s0\/tiles\/(\d+)\/(\d+)\.png/;
-	const match = urlRegex.exec(url);
-
-	if (match) {
-		const [, x, y] = match;
-
-		const filePath = path.join(basePath, `tiles/${x}`);
-		const fileName = `${y}.png`;
-		return { filePath, fileName };
-	}
-
-	throw new Error("Invalid URL");
+function pathFromCoords(coords: { x: number; y: number }) {
+	return {
+		filePath: path.join(basePath, "tiles", String(coords.x)),
+		fileName: `${coords.y}.png`,
+	};
 }
+
+const createdDirs = new Set<string>();
+async function ensureDirOnce(dir: string) {
+	if (createdDirs.has(dir)) return;
+	await fs.promises.mkdir(dir, { recursive: true });
+	createdDirs.add(dir);
+}
+
+const errorBuf: string[] = [];
+function logErrorTask(t: Task) {
+	errorBuf.push(JSON.stringify(t));
+}
+setInterval(() => {
+	if (!errorBuf.length) return;
+	const payload = errorBuf.splice(0).join("\n") + "\n";
+	fs.promises
+		.mkdir(path.join(basePath, "logs"), { recursive: true })
+		.then(() => fs.promises.appendFile(path.join(basePath, "logs", "errors.ndjson"), payload));
+}, 5000).unref();
 
 function writeCreate(filePath: string, fileContents: string | Buffer) {
 	const dirPath = path.dirname(filePath);
@@ -125,23 +138,13 @@ function formattedTime(ms: number) {
 	return `${(ms / HOUR).toFixed(0)}h`;
 }
 
-/* -------------------- MAKE URLS -------------------- */
-const wPlaceURLs: string[] = [];
-
-for (let x = minX; x <= maxX; x++) {
-	for (let y = minY; y <= maxY; y++) {
-		const url = wPlaceURL.replace("{x}", x.toString()).replace("{y}", y.toString());
-		wPlaceURLs.push(url);
-	}
-}
-
 /* -------------------- DOWNLOAD URLS -------------------- */
 const limiter = new Bottleneck({
 	maxConcurrent: concurrency,
 	minTime,
 });
 
-function downloadURL(url: string): Promise<{ code: number; buffer?: Buffer }> {
+function downloadURL(url: string): Promise<{ code: number; body?: Readable }> {
 	return new Promise((resolve, reject) => {
 		const proxyAgent = getAgent(getRandomProxy());
 
@@ -151,7 +154,7 @@ function downloadURL(url: string): Promise<{ code: number; buffer?: Buffer }> {
 
 				switch (code) {
 					case 200:
-						resolve({ code, buffer: Buffer.from(await response.body.arrayBuffer()) });
+						resolve({ code, body: response.body as Readable });
 						break;
 
 					default:
@@ -217,14 +220,14 @@ async function scheduleTask(task: Task) {
 		task.leaseUntil = Date.now() + LEASE_MS;
 
 		try {
-			const { code, buffer } = await downloadURL(task.url);
+			const { code, body } = await downloadURL(task.url);
 
-			if (code === 200 && buffer) {
+			if (code === 200 && body) {
 				// Success!
-				const pathData = wPlaceURLToPath(task.url);
-				const { filePath, fileName } = pathData;
-				const filePathWithName = path.join(filePath, fileName);
-				writeCreate(filePathWithName, buffer);
+				const { filePath, fileName } = pathFromCoords(task.coords);
+				const dest = path.join(filePath, fileName);
+
+				await pipeline(body, fs.createWriteStream(dest));
 
 				task.status = "done";
 				task.code = code;
@@ -260,10 +263,7 @@ function retryTask(task: Task, err: any) {
 		// Give up on life
 		task.status = "error";
 
-		writeCreate(
-			path.join(basePath, `logs`, `error-${task.coords.x}/${task.coords.y}.log`),
-			JSON.stringify(task),
-		);
+		logErrorTask(task);
 		return;
 	}
 
@@ -275,7 +275,7 @@ function retryTask(task: Task, err: any) {
 
 let lastCountDone = 0;
 
-const interval = setInterval(() => {
+setInterval(() => {
 	const values = [...tasks.values()];
 	const doneCount = values.filter((t) => t.status === "done").length;
 	const remaining = values.filter((t) =>
@@ -299,10 +299,14 @@ const interval = setInterval(() => {
 			retryTask(task, "lease expired");
 		}
 	}
-}, 5 * SECOND);
+}, 5 * SECOND).unref();
 
 // --- Pull loop ---
 async function runAll() {
+	for (let x = minX; x <= maxX; x++) {
+		await ensureDirOnce(path.join(basePath, "tiles", String(x)));
+	}
+
 	while (true) {
 		let active = 0;
 		for (const task of tasks.values()) {
@@ -315,8 +319,6 @@ async function runAll() {
 		if (active === 0) break;
 		await new Promise((r) => setTimeout(r, 50));
 	}
-
-	clearInterval(interval);
 
 	const values = [...tasks.values()];
 

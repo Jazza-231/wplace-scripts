@@ -28,7 +28,7 @@ const minY = 0;
 const maxY = 2047;
 
 const concurrency = 800;
-const minTime = 1;
+const minTime = 0;
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -78,6 +78,8 @@ function getAgent(proxyURI: string) {
 	if (!agent) {
 		agent = new ProxyAgent({
 			uri: proxyURI,
+			connections: 64,
+			pipelining: 8,
 			keepAliveTimeout: 5 * MINUTE,
 			keepAliveMaxTimeout: 5 * MINUTE,
 			connectTimeout: MINUTE,
@@ -93,6 +95,11 @@ function getAgent(proxyURI: string) {
 function getRandomProxy() {
 	const randomIndex = Math.floor(Math.random() * numberOfProxies);
 	return proxies[randomIndex];
+}
+
+let proxyIdx = 0;
+function getNextProxy() {
+	return proxies[proxyIdx++ % proxies.length];
 }
 
 function pathFromCoords(coords: { x: number; y: number }) {
@@ -146,7 +153,7 @@ const limiter = new Bottleneck({
 
 function downloadURL(url: string): Promise<{ code: number; body?: Readable }> {
 	return new Promise((resolve, reject) => {
-		const proxyAgent = getAgent(getRandomProxy());
+		const proxyAgent = getAgent(getNextProxy());
 
 		request(url, { dispatcher: proxyAgent })
 			.then(async (response) => {
@@ -227,7 +234,7 @@ async function scheduleTask(task: Task) {
 				const { filePath, fileName } = pathFromCoords(task.coords);
 				const dest = path.join(filePath, fileName);
 
-				await pipeline(body, fs.createWriteStream(dest));
+				await pipeline(body, fs.createWriteStream(dest, { highWaterMark: 1 << 20 }));
 
 				task.status = "done";
 				task.code = code;

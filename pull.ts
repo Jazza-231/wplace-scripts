@@ -70,16 +70,17 @@ let errorCount = 0;
 setInterval(() => {
 	const active = [...perProxy.entries()].filter(([, s]) => s.ok + s.fourxx + s.fivexx > 0).length;
 
-	console.log(
-		"latency",
-		latencyBuckets,
-		"status",
-		statusCounts,
-		"errors",
-		errorCount,
-		"proxies",
-		active,
-	);
+	// console.log(
+	// 	"latency",
+	// 	latencyBuckets,
+	// 	"status",
+	// 	statusCounts,
+	// 	"errors",
+	// 	errorCount,
+	// 	"proxies",
+	// 	active,
+	// );
+
 	for (const k of Object.keys(latencyBuckets)) delete latencyBuckets[k];
 	for (const k of Object.keys(statusCounts)) delete statusCounts[+k];
 	errorCount = 0;

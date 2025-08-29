@@ -44,6 +44,8 @@ const maxX = args?.maxX ?? 2047;
 const minY = args?.minY ?? 0;
 const maxY = args?.maxY ?? 2047;
 
+const totalTasks = (maxX - minX + 1) * (maxY - minY + 1);
+
 const concurrency = 800;
 const minTime = 0;
 
@@ -199,6 +201,17 @@ function formattedTime(ms: number) {
 	return `${(ms / HOUR).toFixed(0)}h`;
 }
 
+function createTaskFromCoords(coords: { x: number; y: number }): Task {
+	const url = wPlaceURL.replace("{x}", coords.x.toString()).replace("{y}", coords.y.toString());
+	return {
+		status: "pending",
+		url,
+		coords,
+		attempts: 0,
+		nextEarliestAt: 0,
+	};
+}
+
 /* -------------------- DOWNLOAD URLS -------------------- */
 const limiter = new Bottleneck({
 	maxConcurrent: concurrency,
@@ -267,20 +280,19 @@ function computeDelay(attempt: number) {
 	return backoffDelay + jitter;
 }
 
-const tasks = new Map<string, Task>();
-
-for (let x = minX; x <= maxX; x++) {
-	for (let y = minY; y <= maxY; y++) {
-		const url = wPlaceURL.replace("{x}", x.toString()).replace("{y}", y.toString());
-		tasks.set(url, {
-			status: "pending",
-			url,
-			coords: { x, y },
-			attempts: 0,
-			nextEarliestAt: 0,
-		});
+function* generateTaskCoords() {
+	for (let x = minX; x <= maxX; x++) {
+		for (let y = minY; y <= maxY; y++) {
+			yield { x, y };
+		}
 	}
 }
+
+const taskGenerator = generateTaskCoords();
+const activeTasks = new Map<string, Task>(); // Only store active/retry tasks
+const maxActiveTasks = concurrency * 3; // Buffer for retries
+const completedStats = { done: 0, failed: 0, files: 0 };
+let generatorExhausted = false;
 
 async function scheduleTask(task: Task) {
 	if (task.status !== "pending") return;
@@ -350,21 +362,26 @@ function retryTask(task: Task, err: any) {
 let lastCountDone = 0;
 
 setInterval(() => {
-	const values = [...tasks.values()];
-	const doneCount = values.filter((t) => t.status === "done").length;
-	const remaining = values.filter((t) =>
+	const values = [...activeTasks.values()];
+	const activeCount = values.filter((t) =>
 		["pending", "queued", "running"].includes(t.status),
 	).length;
 
 	let perDone = 0;
-	if (doneCount > lastCountDone) {
-		perDone = Math.round((doneCount - lastCountDone) / 5);
-		lastCountDone = doneCount;
+	const currentDone = completedStats.done;
+	if (currentDone > lastCountDone) {
+		perDone = Math.round((currentDone - lastCountDone) / 5);
+		lastCountDone = currentDone;
 	}
 
-	const etaMs = perDone > 0 ? (remaining / perDone) * SECOND : 0;
+	const totalRemaining = totalTasks - completedStats.done - completedStats.failed;
+	const etaMs = perDone > 0 ? (totalRemaining / perDone) * SECOND : 0;
 
-	console.log(`${perDone} per second, ${remaining} remaining, est ${formattedTime(etaMs)}`);
+	console.log(
+		`${perDone} per second, ${activeCount} active, ${totalRemaining} remaining, ${
+			completedStats.files
+		} files, est ${formattedTime(etaMs)}`,
+	);
 
 	const now = Date.now();
 	for (const task of values) {
@@ -382,27 +399,45 @@ async function runAll() {
 	}
 
 	while (true) {
-		let active = 0;
-		for (const task of tasks.values()) {
+		// Fill up active tasks from generator
+		while (activeTasks.size < maxActiveTasks && !generatorExhausted) {
+			const next = taskGenerator.next();
+			if (next.done) {
+				generatorExhausted = true;
+				break;
+			}
+			const task = createTaskFromCoords(next.value);
+			activeTasks.set(task.url, task);
+		}
+
+		// Clean up completed tasks
+		for (const [url, task] of activeTasks.entries()) {
+			if (task.status === "done") {
+				if (task.code === 200) completedStats.files++;
+				completedStats.done++;
+				activeTasks.delete(url);
+			} else if (task.status === "error") {
+				completedStats.failed++;
+				activeTasks.delete(url);
+			}
+		}
+
+		// If no active tasks and generator is done, we're finished
+		if (activeTasks.size === 0 && generatorExhausted) break;
+
+		// Schedule pending tasks
+		for (const task of activeTasks.values()) {
 			if (task.status === "pending" && Date.now() >= task.nextEarliestAt) {
 				scheduleTask(task);
 			}
-			if (["pending", "queued", "running"].includes(task.status)) active++;
 		}
 
-		if (active === 0) break;
 		await new Promise((r) => setTimeout(r, 50));
 	}
 
-	const values = [...tasks.values()];
-
-	const done = values.filter((t) => t.status === "done").length;
-	const failed = values.filter((t) => t.status === "error").length;
-	const twoHundreds = values.filter((t) => t.code === 200).length;
-
-	console.log(`All tasks finished. Done=${done}, Failed=${failed}, Files=${twoHundreds}`);
-
-	return;
+	console.log(
+		`All tasks finished. Done=${completedStats.done}, Failed=${completedStats.failed}, Files=${completedStats.files}`,
+	);
 }
 
 runAll();

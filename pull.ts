@@ -34,6 +34,42 @@ const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 
+/* -------------------- TELEMETRY -------------------- */
+
+const perProxy = new Map<string, { ok: number; fourxx: number; fivexx: number }>();
+
+function bump(proxy: string, code: number) {
+	const s = perProxy.get(proxy) ?? { ok: 0, fourxx: 0, fivexx: 0 };
+	if (code >= 200 && code < 300) s.ok++;
+	else if (code >= 400 && code < 500) s.fourxx++;
+	else if (code >= 500) s.fivexx++;
+	perProxy.set(proxy, s);
+}
+
+const latencyBuckets: Record<string, number> = {};
+const statusCounts: Record<number, number> = {};
+let errorCount = 0;
+
+setInterval(() => {
+	const active = [...perProxy.entries()].filter(([, s]) => s.ok + s.fourxx + s.fivexx > 0).length;
+
+	console.log(
+		"latency",
+		latencyBuckets,
+		"status",
+		statusCounts,
+		"errors",
+		errorCount,
+		"proxies",
+		active,
+	);
+	for (const k of Object.keys(latencyBuckets)) delete latencyBuckets[k];
+	for (const k of Object.keys(statusCounts)) delete statusCounts[+k];
+	errorCount = 0;
+
+	perProxy.clear();
+}, 5000).unref();
+
 /* -------------------- GET PROXIES -------------------- */
 
 console.log("Fetching proxies...");
@@ -153,11 +189,22 @@ const limiter = new Bottleneck({
 
 function downloadURL(url: string): Promise<{ code: number; body?: Readable }> {
 	return new Promise((resolve, reject) => {
-		const proxyAgent = getAgent(getNextProxy());
+		const proxy = getNextProxy();
+		const proxyAgent = getAgent(proxy);
+
+		const t0 = Date.now();
 
 		request(url, { dispatcher: proxyAgent })
 			.then(async (response) => {
 				const code = response.statusCode;
+
+				const dt = Date.now() - t0;
+				const b = dt < 1000 ? "<1s" : dt < 3000 ? "1-3s" : dt < 7000 ? "3-7s" : ">=7s";
+
+				latencyBuckets[b] = (latencyBuckets[b] ?? 0) + 1;
+				statusCounts[code] = (statusCounts[code] ?? 0) + 1;
+
+				bump(proxy, code);
 
 				switch (code) {
 					case 200:
@@ -170,6 +217,8 @@ function downloadURL(url: string): Promise<{ code: number; body?: Readable }> {
 				}
 			})
 			.catch((err) => {
+				errorCount++;
+
 				reject({ err });
 			});
 	});

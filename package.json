@@ -3,6 +3,7 @@
 	"dependencies": {
 		"@types/node": "^24.3.0",
 		"bottleneck": "^2.19.5",
+		"tsx": "^4.20.5",
 		"undici": "^7.15.0"
 	}
 }

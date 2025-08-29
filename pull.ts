@@ -8,7 +8,7 @@
  */
 
 /* -------------------- IMPORTS -------------------- */
-import { fetch, request, ProxyAgent } from "undici";
+import { request, ProxyAgent } from "undici";
 import fs from "fs";
 import path from "path";
 import Bottleneck from "bottleneck";
@@ -92,9 +92,40 @@ setInterval(() => {
 
 /* -------------------- GET PROXIES -------------------- */
 
-console.log("Fetching proxies...");
+async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
+	for (let attempt = 1; attempt <= maxRetries; attempt++) {
+		try {
+			console.log(`Fetching proxies (attempt ${attempt}/${maxRetries})...`);
 
-const proxyRequest = await fetch(proxyListURL);
+			const proxyRequest = await fetch(url, {
+				// Use signal for timeout (standard fetch API)
+				signal: AbortSignal.timeout(30000), // 30 seconds total timeout
+			});
+
+			if (!proxyRequest.ok) {
+				throw new Error(`HTTP ${proxyRequest.status}: ${proxyRequest.statusText}`);
+			}
+
+			return proxyRequest; // Explicitly return the response
+		} catch (error) {
+			console.error(`Attempt ${attempt} failed:`, error.message);
+
+			if (attempt === maxRetries) {
+				throw error; // Final attempt failed
+			}
+
+			// Wait before retrying (exponential backoff)
+			const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+			console.log(`Retrying in ${delay}ms...`);
+			await new Promise((resolve) => setTimeout(resolve, delay));
+		}
+	}
+
+	// This should never be reached due to the throw above, but TypeScript needs it
+	throw new Error("All retry attempts failed");
+}
+
+const proxyRequest = await fetchWithRetry(proxyListURL);
 const proxyText = (await proxyRequest.text()).trim();
 
 let proxyRequestList = proxyText

@@ -93,11 +93,24 @@ for (let i = 0; i < splits; i++) {
 }
 
 function parseEtaString(etaStr: string): number {
-	if (etaStr.includes("ms")) return parseInt(etaStr);
-	if (etaStr.includes("s")) return parseInt(etaStr) * 1000;
-	if (etaStr.includes("m")) return parseInt(etaStr) * 60 * 1000;
-	if (etaStr.includes("h")) return parseInt(etaStr) * 60 * 60 * 1000;
-	return 0;
+	let totalMs = 0;
+
+	// Split by spaces so we can handle things like "1h 5m" or "1m 30s"
+	const parts = etaStr.trim().split(/\s+/);
+
+	for (const part of parts) {
+		if (part.endsWith("ms")) {
+			totalMs += parseFloat(part.replace("ms", ""));
+		} else if (part.endsWith("s")) {
+			totalMs += parseFloat(part.replace("s", "")) * 1000;
+		} else if (part.endsWith("m")) {
+			totalMs += parseFloat(part.replace("m", "")) * 60 * 1000;
+		} else if (part.endsWith("h")) {
+			totalMs += parseFloat(part.replace("h", "")) * 60 * 60 * 1000;
+		}
+	}
+
+	return totalMs;
 }
 
 function formattedTime(ms: number): string {

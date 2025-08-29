@@ -1,0 +1,7 @@
+{
+	"type": "module",
+	"dependencies": {
+		"@types/node": "^24.3.0",
+		"undici": "^7.15.0"
+	}
+}

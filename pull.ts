@@ -411,7 +411,7 @@ setInterval(() => {
 	console.log(
 		`${perDone} per second, ${activeCount} active, ${totalRemaining} remaining, ${
 			completedStats.files
-		} files, est ${formattedTime(etaMs)}`,
+		} files, ${completedStats.failed} failed, est ${formattedTime(etaMs)}`,
 	);
 
 	const now = Date.now();

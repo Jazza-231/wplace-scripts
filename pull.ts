@@ -63,13 +63,33 @@ const proxies = proxyRequestList.map((proxy) => {
 		.replace("{port}", proxy.port);
 });
 
+const numberOfProxies = proxies.length;
+
 writeCreate(path.join(basePath, "logs", "proxies.json"), JSON.stringify(proxies));
 
-console.log(`Fetched ${proxies.length} proxies`);
+console.log(`Fetched ${numberOfProxies} proxies`);
+
+const agentByProxy = new Map<string, ProxyAgent>();
+
+function getAgent(proxyURI: string) {
+	let agent = agentByProxy.get(proxyURI);
+	if (!agent) {
+		agent = new ProxyAgent({
+			uri: proxyURI,
+			keepAliveTimeout: 5 * MINUTE,
+			keepAliveMaxTimeout: 5 * MINUTE,
+			connectTimeout: MINUTE,
+			autoSelectFamily: true,
+			connect: { timeout: MINUTE },
+		});
+		agentByProxy.set(proxyURI, agent);
+	}
+	return agent;
+}
 
 /* -------------------- HELPERS -------------------- */
 function getRandomProxy() {
-	const randomIndex = Math.floor(Math.random() * proxies.length);
+	const randomIndex = Math.floor(Math.random() * numberOfProxies);
 	return proxies[randomIndex];
 }
 
@@ -123,14 +143,7 @@ const limiter = new Bottleneck({
 
 function downloadURL(url: string): Promise<{ code: number; buffer?: Buffer }> {
 	return new Promise((resolve, reject) => {
-		const proxyAgent = new ProxyAgent({
-			uri: getRandomProxy(),
-			keepAliveTimeout: MINUTE,
-			keepAliveMaxTimeout: 5 * MINUTE,
-			connectTimeout: MINUTE,
-			autoSelectFamily: true,
-			connect: { timeout: MINUTE },
-		});
+		const proxyAgent = getAgent(getRandomProxy());
 
 		request(url, { dispatcher: proxyAgent })
 			.then(async (response) => {

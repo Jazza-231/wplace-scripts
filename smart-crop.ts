@@ -33,11 +33,11 @@ type Component = { minX: number; minY: number; maxX: number; maxY: number; count
 
 // === Helpers ===
 const rl = createInterface({ input: process.stdin, output: process.stdout });
-const ask = (q) => new Promise((res) => rl.question(q, (a) => res(a.trim().replace(/['"]/g, ""))));
-const isImage = (p) => /\.(png|webp|jpg|jpeg|bmp|gif)$/i.test(p);
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const ask = (q: string) =>
+	new Promise((res) => rl.question(q, (a: string) => res(a.trim().replace(/['"]/g, ""))));
+const isImage = (p: string) => /\.(png|webp|jpg|jpeg|bmp|gif)$/i.test(p);
 
-function choosePow2Scale(w /* 1x padded width */, _h) {
+function choosePow2Scale(w: number, _h: number) {
 	const width = Math.max(1, w);
 	let best = 1;
 	let bestDist = Infinity;
@@ -51,7 +51,7 @@ function choosePow2Scale(w /* 1x padded width */, _h) {
 	return best;
 }
 
-async function getMask(inputPath) {
+async function getMask(inputPath: string) {
 	const img = sharp(inputPath, { limitInputPixels: false }).ensureAlpha();
 	const meta = await img.metadata();
 	const { width: W, height: H } = meta;
@@ -68,10 +68,10 @@ async function getMask(inputPath) {
 	return { W, H, mask, solidCount };
 }
 
-function dilate(W, H, mask, r) {
+function dilate(W: number, H: number, mask: Uint8Array<ArrayBuffer>, r: number) {
 	if (r <= 0) return mask;
 	const out = new Uint8Array(W * H);
-	const idx = (x, y) => y * W + x;
+	const idx = (x: number, y: number) => y * W + x;
 	for (let y = 0; y < H; y++) {
 		for (let x = 0; x < W; x++) {
 			let on = 0;
@@ -93,9 +93,9 @@ function dilate(W, H, mask, r) {
 	return out;
 }
 
-function components(W, H, mask) {
+function components(W: number, H: number, mask: Uint8Array<ArrayBuffer>) {
 	const visited = new Uint8Array(W * H);
-	const idx = (x, y) => y * W + x;
+	const idx = (x: number, y: number) => y * W + x;
 	const comps: Component[] = [];
 	const qx = new Int32Array(W * H);
 	const qy = new Int32Array(W * H);
@@ -151,14 +151,14 @@ function components(W, H, mask) {
 
 function mergeTouchingBoxes(boxes: Component[], gap: number) {
 	if (boxes.length <= 1) return boxes.slice();
-	const expand = (b, g) => ({
+	const expand = (b: Component, g: number) => ({
 		minX: b.minX - g,
 		minY: b.minY - g,
 		maxX: b.maxX + g,
 		maxY: b.maxY + g,
 		count: b.count,
 	});
-	const intersects = (a, b) =>
+	const intersects = (a: Component, b: Component) =>
 		!(a.maxX < b.minX || b.maxX < a.minX || a.maxY < b.minY || b.maxY < a.minY);
 
 	let arr = boxes.map((b) => ({ ...b }));
@@ -193,7 +193,7 @@ function mergeTouchingBoxes(boxes: Component[], gap: number) {
 	return arr;
 }
 
-function tightenBoxOnOriginal(mask, W, H, box) {
+function tightenBoxOnOriginal(mask: Uint8Array<ArrayBuffer>, W: number, H: number, box: Component) {
 	const minX = Math.max(0, box.minX);
 	const minY = Math.max(0, box.minY);
 	const maxX = Math.min(W - 1, box.maxX);
@@ -218,7 +218,7 @@ function tightenBoxOnOriginal(mask, W, H, box) {
 	return cnt ? { minX: x0, minY: y0, maxX: x1, maxY: y1, count: cnt } : null;
 }
 
-async function processImage(inputPath) {
+async function processImage(inputPath: string) {
 	const base = basename(inputPath).replace(/\.[^.]+$/, "");
 	const parent = basename(dirname(inputPath)); // folder name (e.g. "104")
 	await mkdir(OUTPUT_DIR, { recursive: true });
@@ -270,7 +270,7 @@ async function processImage(inputPath) {
 			h1 = info.height;
 
 		if (STRICT_GRID_GUARD) {
-			const gcd = (a, b) => {
+			const gcd = (a: number, b: number) => {
 				while (b) [a, b] = [b, a % b];
 				return a;
 			};
@@ -334,7 +334,7 @@ async function processImage(inputPath) {
 	}
 }
 
-async function listImages(targetPath) {
+async function listImages(targetPath: string) {
 	const stat = await _stat(targetPath);
 	if (stat.isDirectory()) {
 		const entries = await readdir(targetPath);
@@ -347,8 +347,8 @@ async function listImages(targetPath) {
 (async () => {
 	try {
 		while (true) {
-			const p = await ask("input file or folder (or STOP to quit): ");
-			if (!p || /^stop$/i.test(String(p))) {
+			const p = String(await ask("input file or folder (or STOP to quit): "));
+			if (!p || /^stop$/i.test(p)) {
 				console.log("stopping");
 				break;
 			}

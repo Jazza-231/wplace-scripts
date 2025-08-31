@@ -170,6 +170,8 @@ function formattedTime(ms: number) {
 	return m ? `${h}h ${m}m` : `${h}h`;
 }
 
+const average = (array: number[]) => array.reduce((a, b) => a + b) / array.length;
+
 setInterval(() => {
 	if (childStats.size === 0) return;
 
@@ -179,7 +181,7 @@ setInterval(() => {
 	const totalRemaining = stats.reduce((sum, s) => sum + s.remaining, 0);
 	const totalFiles = stats.reduce((sum, s) => sum + s.files, 0);
 	const failed = stats.reduce((sum, s) => sum + s.failed, 0);
-	const maxEtaMs = Math.max(...stats.map((s) => s.etaMs));
+	const maxEtaMs = average(stats.map((s) => s.etaMs));
 
 	console.log(
 		`📊 COMBINED: ${totalPerSecond} per second, ${totalActive} active, ${totalRemaining} remaining, ${totalFiles} files, ${failed} failed, est ${formattedTime(

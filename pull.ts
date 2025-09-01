@@ -17,7 +17,7 @@ import { Readable } from "stream";
 
 /* -------------------- GLOBALS -------------------- */
 const proxyListURL =
-	"https://proxy.webshare.io/api/v2/proxy/list/download/bagchfwumudyznudckorwlspkoddiadfdarzqgxs/-/any/username/direct/-/?plan_id=11758104";
+	"https://proxy.webshare.io/api/v2/proxy/list/download/zbgxzbrtvewzcgswesweqdcbtcrmmihxdgtuwxdm/-/any/username/direct/-/?plan_id=11758104";
 const basePath = "C:/Users/jazza/Downloads/wplace/";
 const wPlaceURL = "https://backend.wplace.live/files/s0/tiles/{x}/{y}.png";
 

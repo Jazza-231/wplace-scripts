@@ -64,7 +64,6 @@ async function averageImage(stream: Stream.Readable | string, opts: AverageOpts 
 	stream.pipe(image);
 
 	// Can I let sharp do the averaging? That would be faster
-
 	const rgba = await image.ensureAlpha().raw().toBuffer();
 	let sumR = 0,
 		sumG = 0,
@@ -267,14 +266,15 @@ async function averageRange(
 	return outBuffer;
 }
 
-async function main(min: number, max: number, concurrency: number) {
-	const averages = await averageRange(min, max, { transparency: false }, concurrency);
+async function main(min: number, max: number, concurrency: number, opts: AverageOpts) {
+	const averages = await averageRange(min, max, opts, concurrency);
 
 	const width = max - min + 1;
 
 	sharp(averages, { raw: { width, height: tileHeight, channels: 3 } }).toFile(
-		path.join(wPlacePath, "average 0-20.png"),
+		path.join(wPlacePath, `average ${min}-${max}${opts.transparency ? "-t" : ""}.png`),
 	);
 }
 
-await main(0, 100, 6);
+await main(0, 100, 6, { transparency: false });
+await main(0, 100, 6, { transparency: true });

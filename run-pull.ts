@@ -26,7 +26,7 @@ interface ChildStats {
 	active: number;
 	remaining: number;
 	files: number;
-	failed: number;
+	fails: number;
 	etaMs: number;
 }
 
@@ -78,14 +78,14 @@ for (let i = 0; i < splits; i++) {
 			/(\d+) per second, (\d+) active, (\d+) remaining, (\d+) files, (\d+) failed, est (.+)/,
 		);
 		if (match) {
-			const [, perSecond, active, remaining, files, failed, etaStr] = match;
+			const [, perSecond, active, remaining, files, fails, etaStr] = match;
 			const etaMs = parseEtaString(etaStr);
 			childStats.set(i, {
 				perSecond: parseInt(perSecond),
 				active: parseInt(active),
 				remaining: parseInt(remaining),
 				files: parseInt(files),
-				failed: parseInt(failed),
+				fails: parseInt(fails),
 				etaMs,
 			});
 		} else {
@@ -180,11 +180,11 @@ setInterval(() => {
 	const totalActive = stats.reduce((sum, s) => sum + s.active, 0);
 	const totalRemaining = stats.reduce((sum, s) => sum + s.remaining, 0);
 	const totalFiles = stats.reduce((sum, s) => sum + s.files, 0);
-	const failed = stats.reduce((sum, s) => sum + s.failed, 0);
+	const fails = stats.reduce((sum, s) => sum + s.fails, 0);
 	const maxEtaMs = average(stats.map((s) => s.etaMs));
 
 	console.log(
-		`📊 COMBINED: ${totalPerSecond} per second, ${totalActive} active, ${totalRemaining} remaining, ${totalFiles} files, ${failed} failed, est ${formattedTime(
+		`📊 COMBINED: ${totalPerSecond} per second, ${totalActive} active, ${totalRemaining} remaining, ${totalFiles} files, ${fails} fails, est ${formattedTime(
 			maxEtaMs,
 		)}`,
 	);

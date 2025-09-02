@@ -1,7 +1,6 @@
 import { spawn } from "child_process";
 import path from "path";
 import * as fs from "fs";
-import * as readline from "readline";
 import sharp from "sharp";
 import Stream from "stream";
 
@@ -14,47 +13,6 @@ const tileHeight = 2048;
 const detailedLogs = false;
 
 type AverageOpts = { transparency?: boolean };
-
-function listFilesInArchiveFolder(archive: string, folder: string): Promise<string[]> {
-	return new Promise((resolve, reject) => {
-		// List, technical details, archive, glob
-		const args = ["l", "-slt", archive, `*/${folder}/*`];
-		const child = spawn(sevenZipPath, args);
-
-		const rl = readline.createInterface({ input: child.stdout });
-		const files: string[] = [];
-
-		rl.on("line", (line) => {
-			const match = line.match(/Path = (.+)/);
-			if (match && match[1].endsWith(".png")) {
-				const filePath = match[1];
-				files.push(filePath);
-			}
-		});
-
-		let errorBuffer = "";
-		child.stderr.on("data", (d) => (errorBuffer += d.toString()));
-
-		child.on("close", (code) => {
-			if (code === 0) resolve(files);
-			else reject(new Error(`7z list failed with code ${code}: ${errorBuffer || "(no stderr)"}`));
-		});
-	});
-}
-
-function streamPathFromArchive(archive: string, file: string): Stream.Readable {
-	// Extract, stdout, archive, file
-	// is e faster than x?
-	const args = ["x", "-so", archive, file];
-	const child = spawn(sevenZipPath, args);
-	return child.stdout;
-}
-
-function startFileSave(stream: Stream.Readable, outFile: string) {
-	const writableStream = fs.createWriteStream(outFile);
-	stream.pipe(writableStream);
-	return writableStream;
-}
 
 async function averageImage(stream: Stream.Readable | string, opts: AverageOpts = {}) {
 	const image = sharp();
@@ -95,30 +53,6 @@ function ensureDir(p: string) {
 	if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 }
 
-function moveDirContents(source: string, destination: string) {
-	ensureDir(destination);
-	for (const name of fs.readdirSync(source)) {
-		const from = path.join(source, name);
-		const to = path.join(destination, name);
-		if (fs.existsSync(to)) fs.rmSync(to, { recursive: true, force: true });
-		fs.renameSync(from, to);
-	}
-}
-
-function findSubdirEndingWith(root: string, endName: string): string | null {
-	const queue = [root];
-	while (queue.length) {
-		const current = queue.shift()!;
-		const stat = fs.statSync(current);
-		if (!stat.isDirectory()) continue;
-		if (path.basename(current) === endName) return current;
-		for (const child of fs.readdirSync(current)) {
-			queue.push(path.join(current, child));
-		}
-	}
-	return null;
-}
-
 function extractArchiveToFolder(archive: string, destDir: string) {
 	return new Promise((resolve, reject) => {
 		ensureDir(destDir);
@@ -135,56 +69,6 @@ function extractArchiveToFolder(archive: string, destDir: string) {
 				fs.rmSync(destDir, { recursive: true, force: true });
 				return reject(new Error(`7z extract failed with code ${code}: ${stderr || "(no stderr)"}`));
 			} else resolve(destDir);
-		});
-	});
-}
-
-function extractFolderFromArchive(
-	archive: string,
-	internalFolder: string,
-	destDir: string,
-	opts: { overwrite?: boolean } = {},
-): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const tmpRoot = path.join(destDir, `.__extract_${Date.now()}`);
-		ensureDir(tmpRoot);
-
-		const args = ["x", "-y", `-o${tmpRoot}`, archive, `-ir!*/${internalFolder}/*`];
-		const child = spawn(sevenZipPath, args);
-
-		let stderr = "";
-		child.stderr.on("data", (d) => (stderr += d.toString()));
-
-		child.on("close", (code) => {
-			if (code !== 0) {
-				// uh oh, clean up time
-				fs.rmSync(tmpRoot, { recursive: true, force: true });
-				return reject(new Error(`7z extract failed with code ${code}: ${stderr || "(no stderr)"}`));
-			}
-
-			// find "<something>/<internalFolder>" and move insides to "<destDir>"
-			const extractedInner = findSubdirEndingWith(tmpRoot, internalFolder);
-			if (!extractedInner) {
-				fs.rmSync(tmpRoot, { recursive: true, force: true });
-				return reject(
-					new Error(`Could not locate extracted folder "${internalFolder}" under temp root`),
-				);
-			}
-
-			// const finalDir = path.join(destDir, internalFolder);
-			const finalDir = destDir;
-
-			if (opts.overwrite && fs.existsSync(finalDir)) {
-				fs.rmSync(finalDir, { recursive: true, force: true });
-			}
-			ensureDir(finalDir);
-
-			moveDirContents(extractedInner, finalDir);
-
-			// clean up temp
-			fs.rmSync(tmpRoot, { recursive: true, force: true });
-
-			resolve(finalDir);
 		});
 	});
 }

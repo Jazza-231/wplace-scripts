@@ -222,7 +222,7 @@ async function folderToAverageStream(
 
 	const height = averages.length;
 
-	const buffer = Buffer.alloc(width * height * 3);
+	const buffer = Buffer.allocUnsafe(width * height * 3);
 
 	if (detailedLogs) console.log("Making average image");
 
@@ -248,7 +248,7 @@ async function averageRange(
 	concurrency: number = 4,
 ): Promise<Buffer> {
 	const columns = max - min + 1;
-	const outBuffer = Buffer.alloc(columns * tileHeight * 3);
+	const outBuffer = Buffer.allocUnsafe(columns * tileHeight * 3);
 
 	const results: Array<{ x: number; stripBuffer: Buffer }> = [];
 
@@ -302,7 +302,9 @@ let archivePath = path.join(wPlacePath, `${archiveName}-extracted`, archiveName)
 
 // archivePath = path.join(archivePath, archiveName);
 
+console.log("Doing transparency: false");
 await main(archivePath, 0, 100, 30, { transparency: false });
+console.log("Doing transparency: true");
 await main(archivePath, 0, 100, 30, { transparency: true });
 
 // fs.rmSync(archivePath, { recursive: true, force: true });

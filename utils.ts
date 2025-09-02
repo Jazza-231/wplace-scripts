@@ -42,6 +42,7 @@ function listFilesInArchiveFolder(archive: string, folder: string): Promise<stri
 
 function streamPathFromArchive(archive: string, file: string): Stream.Readable {
 	// Extract, stdout, archive, file
+	// is e faster than x?
 	const args = ["x", "-so", archive, file];
 	const child = spawn(sevenZipPath, args);
 	return child.stdout;
@@ -61,7 +62,9 @@ async function averageImage(stream: Stream.Readable | string, opts: AverageOpts 
 	}
 	stream.pipe(image);
 
-	const rgba = await image.clone().ensureAlpha().raw().toBuffer();
+	// Can I let sharp do the averaging? That would be faster
+
+	const rgba = await image.ensureAlpha().raw().toBuffer();
 	let sumR = 0,
 		sumG = 0,
 		sumB = 0,
@@ -168,6 +171,8 @@ function extractFolderFromArchive(
 async function averageFolder(archivePath: string, innerFolder: string, opts: AverageOpts = {}) {
 	console.log(`Getting average for ${archivePath}/${innerFolder}`);
 
+	// Instead of extracting to tmpRoot, use listFilesInArchiveFolder to get list, then stream with streamPathFromArchive
+
 	// Extract archivePath/innerFolder to temp folder
 	const tmpRoot = path.join(wPlacePath, `.__average_${Date.now()}`);
 	ensureDir(tmpRoot);
@@ -178,16 +183,14 @@ async function averageFolder(archivePath: string, innerFolder: string, opts: Ave
 
 	console.log(`Extracted to ${tmpRoot}`);
 
-	const files = fs.readdirSync(tmpRoot).map((f) => path.join(tmpRoot, f));
-
-	console.log(`Getting average for ${files.length} files`);
-
 	const averages: { r: number; g: number; b: number }[] = [];
 
 	for (let i = 0; i <= 2047; i++) {
 		const filePath = path.join(tmpRoot, `${i}.png`);
+		// Instead, if filePath is in list of files
 		if (!fs.existsSync(filePath)) averages.push({ r: 0, g: 0, b: 0 });
 		else {
+			// Stream, dont use path
 			const avg = await averageImage(filePath, opts);
 			if (!avg) averages.push({ r: 0, g: 0, b: 0 });
 			else averages.push(avg);
@@ -233,12 +236,12 @@ async function averageRange(min: number, max: number, opts: AverageOpts = {}): P
 	// Number of columns * 2048 rows * 3 bytes per pixel
 	const outBuffer = Buffer.alloc(columns * tileHeight * 3);
 
-	for (let i = min; i < columns; i++) {
-		const stripBuffer = await folderToAverageStream(archive, i.toString(), 1, opts);
+	for (let x = min; x <= max; x++) {
+		const stripBuffer = await folderToAverageStream(archive, x.toString(), 1, opts);
 
 		for (let y = 0; y < tileHeight; y++) {
 			const srcIdx = y * 3;
-			const dstIdx = (y * columns + i) * 3;
+			const dstIdx = (y * columns + x) * 3;
 			outBuffer[dstIdx + 0] = stripBuffer[srcIdx + 0]; // R
 			outBuffer[dstIdx + 1] = stripBuffer[srcIdx + 1]; // G
 			outBuffer[dstIdx + 2] = stripBuffer[srcIdx + 2]; // B
@@ -248,8 +251,8 @@ async function averageRange(min: number, max: number, opts: AverageOpts = {}): P
 	return outBuffer;
 }
 
-const averages = await averageRange(0, 19);
+const averages = await averageRange(0, 19, { transparency: true });
 
-sharp(averages, { raw: { width: 20, height: 2048, channels: 3 } }).toFile(
-	path.join(wPlacePath, "average 0-20.png"),
+sharp(averages, { raw: { width: 20, height: tileHeight, channels: 3 } }).toFile(
+	path.join(wPlacePath, "average 0-20 trans.png"),
 );

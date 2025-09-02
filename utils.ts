@@ -6,8 +6,12 @@ import sharp from "sharp";
 import Stream from "stream";
 
 const sevenZipPath = "C:/Program Files/7-Zip/7z.exe";
-const archivePath = "C:/Users/jazza/Downloads/wplace/tiles-1.7z";
+const archive = "C:/Users/jazza/Downloads/wplace/tiles-1.7z";
 const wPlacePath = "C:/Users/jazza/Downloads/wplace";
+
+const tileHeight = 2048;
+
+type AverageOpts = { transparency?: boolean };
 
 function listFilesInArchiveFolder(archive: string, folder: string): Promise<string[]> {
 	return new Promise((resolve, reject) => {
@@ -49,7 +53,7 @@ function startFileSave(stream: Stream.Readable, outFile: string) {
 	return writableStream;
 }
 
-async function averageImage(stream: Stream.Readable | string) {
+async function averageImage(stream: Stream.Readable | string, opts: AverageOpts = {}) {
 	const image = sharp();
 	if (typeof stream === "string") {
 		const file = stream;
@@ -64,11 +68,11 @@ async function averageImage(stream: Stream.Readable | string) {
 		sumA = 0;
 	for (let i = 0; i < rgba.length; i += 4) {
 		const a = rgba[i + 3] / 255;
-		if (a <= 0) continue;
+		if (a <= 0 && !opts.transparency) continue;
 		sumR += rgba[i] * a;
 		sumG += rgba[i + 1] * a;
 		sumB += rgba[i + 2] * a;
-		sumA += a;
+		sumA += opts.transparency ? 1 : a;
 	}
 
 	const nonTransparent =
@@ -161,7 +165,7 @@ function extractFolderFromArchive(
 	});
 }
 
-async function averageFolder(archivePath: string, innerFolder: string) {
+async function averageFolder(archivePath: string, innerFolder: string, opts: AverageOpts = {}) {
 	console.log(`Getting average for ${archivePath}/${innerFolder}`);
 
 	// Extract archivePath/innerFolder to temp folder
@@ -171,6 +175,9 @@ async function averageFolder(archivePath: string, innerFolder: string) {
 	console.log(`Extracting ${archivePath}/${innerFolder} to ${tmpRoot}`);
 
 	await extractFolderFromArchive(archivePath, innerFolder, tmpRoot);
+
+	console.log(`Extracted to ${tmpRoot}`);
+
 	const files = fs.readdirSync(tmpRoot).map((f) => path.join(tmpRoot, f));
 
 	console.log(`Getting average for ${files.length} files`);
@@ -181,7 +188,7 @@ async function averageFolder(archivePath: string, innerFolder: string) {
 		const filePath = path.join(tmpRoot, `${i}.png`);
 		if (!fs.existsSync(filePath)) averages.push({ r: 0, g: 0, b: 0 });
 		else {
-			const avg = await averageImage(filePath);
+			const avg = await averageImage(filePath, opts);
 			if (!avg) averages.push({ r: 0, g: 0, b: 0 });
 			else averages.push(avg);
 		}
@@ -194,24 +201,55 @@ async function averageFolder(archivePath: string, innerFolder: string) {
 	return averages;
 }
 
-const averages = await averageFolder(archivePath, "0");
+async function folderToAverageStream(
+	archivePath: string,
+	folder: string,
+	width: number = 1,
+	opts: AverageOpts = {},
+): Promise<Buffer> {
+	const averages = await averageFolder(archivePath, folder, opts);
 
-const height = averages.length;
-const width = 100;
+	const height = averages.length;
 
-const buffer = Buffer.alloc(width * height * 3);
+	const buffer = Buffer.alloc(width * height * 3);
 
-console.log("Making average image");
+	console.log("Making average image");
 
-averages.forEach((p, row) => {
-	for (let col = 0; col < width; col++) {
-		const offset = (row * width + col) * 3;
-		buffer[offset + 0] = p.r;
-		buffer[offset + 1] = p.g;
-		buffer[offset + 2] = p.b;
+	averages.forEach((p, row) => {
+		for (let col = 0; col < width; col++) {
+			const offset = (row * width + col) * 3;
+			buffer[offset + 0] = p.r;
+			buffer[offset + 1] = p.g;
+			buffer[offset + 2] = p.b;
+		}
+	});
+
+	return buffer;
+}
+
+async function averageRange(min: number, max: number, opts: AverageOpts = {}): Promise<Buffer> {
+	const columns = max - min + 1;
+
+	// Number of columns * 2048 rows * 3 bytes per pixel
+	const outBuffer = Buffer.alloc(columns * tileHeight * 3);
+
+	for (let i = min; i < columns; i++) {
+		const stripBuffer = await folderToAverageStream(archive, i.toString(), 1, opts);
+
+		for (let y = 0; y < tileHeight; y++) {
+			const srcIdx = y * 3;
+			const dstIdx = (y * columns + i) * 3;
+			outBuffer[dstIdx + 0] = stripBuffer[srcIdx + 0]; // R
+			outBuffer[dstIdx + 1] = stripBuffer[srcIdx + 1]; // G
+			outBuffer[dstIdx + 2] = stripBuffer[srcIdx + 2]; // B
+		}
 	}
-});
 
-sharp(buffer, { raw: { width, height, channels: 3 } }).toFile(path.join(wPlacePath, "average.png"));
+	return outBuffer;
+}
 
-console.log(`Wrote average.png to ${wPlacePath}`);
+const averages = await averageRange(0, 19);
+
+sharp(averages, { raw: { width: 20, height: 2048, channels: 3 } }).toFile(
+	path.join(wPlacePath, "average 0-20.png"),
+);

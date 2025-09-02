@@ -6,8 +6,9 @@ import sharp from "sharp";
 import Stream from "stream";
 
 const sevenZipPath = "C:/Program Files/7-Zip/7z.exe";
-const archive = "C:/Users/jazza/Downloads/wplace/tiles-1.7z";
+const archiveName = "tiles-15";
 const wPlacePath = "C:/Users/jazza/Downloads/wplace";
+const archive = `${wPlacePath}/${archiveName}.7z`;
 
 const tileHeight = 2048;
 const detailedLogs = false;
@@ -118,6 +119,26 @@ function findSubdirEndingWith(root: string, endName: string): string | null {
 	return null;
 }
 
+function extractArchiveToFolder(archive: string, destDir: string) {
+	return new Promise((resolve, reject) => {
+		ensureDir(destDir);
+
+		const args = ["x", "-y", `-o${destDir}`, archive];
+		const child = spawn(sevenZipPath, args);
+
+		let stderr = "";
+		child.stderr.on("data", (d) => (stderr += d.toString()));
+
+		child.on("close", (code) => {
+			if (code !== 0) {
+				// uh oh, clean up time
+				fs.rmSync(destDir, { recursive: true, force: true });
+				return reject(new Error(`7z extract failed with code ${code}: ${stderr || "(no stderr)"}`));
+			} else resolve(destDir);
+		});
+	});
+}
+
 function extractFolderFromArchive(
 	archive: string,
 	internalFolder: string,
@@ -168,23 +189,16 @@ function extractFolderFromArchive(
 	});
 }
 
-async function averageFolder(archivePath: string, innerFolder: string, opts: AverageOpts = {}) {
-	if (detailedLogs) console.log(`Getting average for ${archivePath}/${innerFolder}`);
+async function averageFolder(folderPath: string, folderNumber: number, opts: AverageOpts = {}) {
+	if (detailedLogs) console.log(`Getting average for ${folderPath}/${folderNumber}`);
 
-	// Extract archivePath/innerFolder to temp folder
-	const tmpRoot = path.join(wPlacePath, `.__average_${Date.now()}`);
-	ensureDir(tmpRoot);
-
-	if (detailedLogs) console.log(`Extracting ${archivePath}/${innerFolder} to ${tmpRoot}`);
-
-	await extractFolderFromArchive(archivePath, innerFolder, tmpRoot);
-
-	if (detailedLogs) console.log(`Extracted to ${tmpRoot}`);
+	const innerFolder = path.join(folderPath, folderNumber.toString());
 
 	const averages: { r: number; g: number; b: number }[] = [];
 
 	for (let i = 0; i <= 2047; i++) {
-		const filePath = path.join(tmpRoot, `${i}.png`);
+		const filePath = path.join(innerFolder, `${i}.png`);
+
 		if (!fs.existsSync(filePath)) averages.push({ r: 0, g: 0, b: 0 });
 		else {
 			const avg = await averageImage(filePath, opts);
@@ -193,20 +207,18 @@ async function averageFolder(archivePath: string, innerFolder: string, opts: Ave
 		}
 	}
 
-	fs.rmSync(tmpRoot, { recursive: true, force: true });
-
 	if (detailedLogs) console.log("Gotten averages");
 
 	return averages;
 }
 
 async function folderToAverageStream(
-	archivePath: string,
-	folder: string,
+	folderPath: string,
+	folderNumber: number,
 	width: number = 1,
 	opts: AverageOpts = {},
 ): Promise<Buffer> {
-	const averages = await averageFolder(archivePath, folder, opts);
+	const averages = await averageFolder(folderPath, folderNumber, opts);
 
 	const height = averages.length;
 
@@ -223,12 +235,13 @@ async function folderToAverageStream(
 		}
 	});
 
-	console.log(`Made average image of ${archivePath}/${folder}`);
+	console.log(`Made average image of ${folderPath}/${folderNumber}`);
 
 	return buffer;
 }
 
 async function averageRange(
+	archivePath: string,
 	min: number,
 	max: number,
 	opts: AverageOpts = {},
@@ -243,7 +256,7 @@ async function averageRange(
 		const batch: Promise<{ x: number; stripBuffer: Buffer }>[] = [];
 		for (let x = i; x <= Math.min(i + concurrency - 1, max); x++) {
 			batch.push(
-				folderToAverageStream(archive, x.toString(), 1, opts).then((stripBuffer: Buffer) => ({
+				folderToAverageStream(archivePath, x, 1, opts).then((stripBuffer: Buffer) => ({
 					x,
 					stripBuffer,
 				})),
@@ -266,8 +279,14 @@ async function averageRange(
 	return outBuffer;
 }
 
-async function main(min: number, max: number, concurrency: number, opts: AverageOpts) {
-	const averages = await averageRange(min, max, opts, concurrency);
+async function main(
+	archivePath: string,
+	min: number,
+	max: number,
+	concurrency: number,
+	opts: AverageOpts,
+) {
+	const averages = await averageRange(archivePath, min, max, opts, concurrency);
 
 	const width = max - min + 1;
 
@@ -276,5 +295,14 @@ async function main(min: number, max: number, concurrency: number, opts: Average
 	);
 }
 
-await main(0, 100, 6, { transparency: false });
-await main(0, 100, 6, { transparency: true });
+let archivePath = path.join(wPlacePath, `${archiveName}-extracted`, archiveName);
+
+// archivePath = path.join(wPlacePath, `_extract_${Date.now()}`);
+// await extractArchiveToFolder(archive, archivePath);
+
+// archivePath = path.join(archivePath, archiveName);
+
+await main(archivePath, 0, 100, 30, { transparency: false });
+await main(archivePath, 0, 100, 30, { transparency: true });
+
+// fs.rmSync(archivePath, { recursive: true, force: true });

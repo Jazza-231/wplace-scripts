@@ -115,7 +115,7 @@ async function fetchWithRetry(url: string, maxRetries = 10): Promise<Response> {
 			}
 
 			// Wait before retrying (exponential backoff)
-			const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+			const delay = Math.min(1000 * Math.pow(2, attempt - 1), 30 * SECOND);
 			console.log(`Retrying in ${delay}ms...`);
 			await new Promise((resolve) => setTimeout(resolve, delay));
 		}

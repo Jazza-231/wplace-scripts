@@ -14,15 +14,19 @@ const detailedLogs = false;
 
 type AverageOpts = { transparency?: boolean };
 
-async function averageImage(stream: Stream.Readable | string, opts: AverageOpts = {}) {
+function streamToSharp(stream: Stream.Readable | string) {
 	const image = sharp();
 	if (typeof stream === "string") {
 		const file = stream;
 		stream = fs.createReadStream(file);
 	}
 	stream.pipe(image);
+	return image;
+}
 
-	// Can I let sharp do the averaging? That would be faster
+async function averageImage(stream: Stream.Readable | string, opts: AverageOpts = {}) {
+	const image = streamToSharp(stream);
+
 	const rgba = await image.ensureAlpha().raw().toBuffer();
 	let sumR = 0,
 		sumG = 0,
@@ -47,6 +51,39 @@ async function averageImage(stream: Stream.Readable | string, opts: AverageOpts 
 			: null;
 
 	return nonTransparent;
+}
+
+async function modeImage(stream: Stream.Readable | string) {
+	const image = streamToSharp(stream);
+
+	const rgba = await image.ensureAlpha().raw().toBuffer();
+
+	const counts = new Map<string, number>();
+
+	for (let i = 0; i < rgba.length; i += 4) {
+		const r = rgba[i];
+		const g = rgba[i + 1];
+		const b = rgba[i + 2];
+		const a = rgba[i + 3] / 255;
+		if (a <= 0) continue;
+
+		const key = `${r},${g},${b}`;
+		counts.set(key, (counts.get(key) ?? 0) + 1);
+	}
+
+	if (counts.size === 0) return null;
+
+	let maxKey = "";
+	let maxCount = -1;
+	for (const [key, count] of counts) {
+		if (count > maxCount) {
+			maxKey = key;
+			maxCount = count;
+		}
+	}
+
+	const [r, g, b] = maxKey.split(",").map(Number);
+	return { r, g, b };
 }
 
 function ensureDir(p: string) {
@@ -85,7 +122,8 @@ async function averageFolder(folderPath: string, folderNumber: number, opts: Ave
 
 		if (!fs.existsSync(filePath)) averages.push({ r: 0, g: 0, b: 0 });
 		else {
-			const avg = await averageImage(filePath, opts);
+			// const avg = await averageImage(filePath, opts);
+			const avg = await modeImage(filePath);
 			if (!avg) averages.push({ r: 0, g: 0, b: 0 });
 			else averages.push(avg);
 		}
@@ -175,7 +213,7 @@ async function main(
 	const width = max - min + 1;
 
 	sharp(averages, { raw: { width, height: tileHeight, channels: 3 } }).toFile(
-		path.join(wPlacePath, `average ${min}-${max}${opts.transparency ? "-t" : ""}.png`),
+		path.join(wPlacePath, `mode ${min}-${max}${opts.transparency ? "-t" : ""}.png`),
 	);
 }
 
@@ -187,8 +225,8 @@ let archivePath = path.join(wPlacePath, `${archiveName}-extracted`, archiveName)
 // archivePath = path.join(archivePath, archiveName);
 
 console.log("Doing transparency: false");
-await main(archivePath, 0, 100, 30, { transparency: false });
-console.log("Doing transparency: true");
-await main(archivePath, 0, 100, 30, { transparency: true });
+await main(archivePath, 0, 2047, 30, { transparency: false });
+// console.log("Doing transparency: true");
+// await main(archivePath, 0, 2047, 30, { transparency: true });
 
 // fs.rmSync(archivePath, { recursive: true, force: true });

@@ -9,6 +9,7 @@ const sevenZipPath = "C:/Program Files/7-Zip/7z.exe";
 const wPlacePath = "C:/Users/jazza/Downloads/wplace";
 const tileHeight = 2048;
 const logging = "basic" as "basic" | "detailed" | "all";
+
 const FUNCTIONS = {
 	average: averageImage,
 	mode: modeImage,
@@ -75,7 +76,6 @@ function streamToSharp(stream: Stream.Readable | string) {
 	if (typeof stream === "string") {
 		const file = stream;
 		stream = fs.createReadStream(file);
-
 		log(`Read ${file} to stream`, "all");
 	}
 	stream.pipe(image);
@@ -89,7 +89,6 @@ function ensureDir(p: string) {
 function extractArchiveToFolder(archive: string, destDir: string) {
 	return new Promise((resolve, reject) => {
 		ensureDir(destDir);
-
 		log(`Extracting ${archive} to ${destDir}`, "all");
 
 		const args = ["x", "-y", `-o${destDir}`, archive];
@@ -111,14 +110,12 @@ function extractArchiveToFolder(archive: string, destDir: string) {
 // Processing functions
 async function averageImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
 	const image = streamToSharp(stream);
-
-	log("Averaging image", "all");
-
 	const rgba = await image.ensureAlpha().raw().toBuffer();
 	let sumR = 0,
 		sumG = 0,
 		sumB = 0,
 		sumA = 0;
+
 	for (let i = 0; i < rgba.length; i += 4) {
 		const a = rgba[i + 3] / 255;
 		if (a <= 0 && !opts.includeTransparency) continue;
@@ -128,27 +125,18 @@ async function averageImage(stream: Stream.Readable | string, opts: ProcessOpts 
 		sumA += opts.includeTransparency ? 1 : a;
 	}
 
-	const nonTransparent =
-		sumA > 0
-			? {
-					r: Math.round(sumR / sumA),
-					g: Math.round(sumG / sumA),
-					b: Math.round(sumB / sumA),
-			  }
-			: null;
-
-	log(`Average is ${nonTransparent}`, "all");
-
-	return nonTransparent;
+	return sumA > 0
+		? {
+				r: Math.round(sumR / sumA),
+				g: Math.round(sumG / sumA),
+				b: Math.round(sumB / sumA),
+		  }
+		: null;
 }
 
 async function modeImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
 	const image = streamToSharp(stream);
-
-	log("Mode-ing image", "all");
-
 	const rgba = await image.ensureAlpha().raw().toBuffer();
-
 	const counts = new Map<string, number>();
 
 	for (let i = 0; i < rgba.length; i += 4) {
@@ -175,34 +163,25 @@ async function modeImage(stream: Stream.Readable | string, opts: ProcessOpts = {
 	}
 
 	const [r, g, b] = maxKey.split(",").map(Number);
-
-	log(`Mode is ${r},${g},${b}`, "all");
 	return { r, g, b };
 }
 
 async function countImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
 	const image = streamToSharp(stream);
-
-	log("Counting pixels in image", "all");
-
 	const rgba = await image.ensureAlpha().raw().toBuffer();
 	const pixels = rgba.length / 4;
 
 	let count = 0;
-	for (let i = 0; i < pixels; i += 4) {
+	for (let i = 0; i < rgba.length; i += 4) {
 		const a = rgba[i + 3] / 255;
 		if (a > 0) count++;
 	}
 
 	const value = Math.log1p(count) / Math.log1p(pixels) ** 0.9;
-	const colour = hslToRgb({ h: value, s: 1, l: value * 0.6 });
-
-	log(`Count is ${count}/${pixels}, colour is ${JSON.stringify(colour)}`, "all");
-
-	return colour;
+	return hslToRgb({ h: value, s: 1, l: value * 0.6 });
 }
 
-// The flow
+// MUCH simpler parallel processing - just increase concurrency and batch sizes
 async function processFolder(
 	folderPath: string,
 	folderNumber: number,
@@ -210,7 +189,6 @@ async function processFolder(
 	opts: ProcessOpts = {},
 ) {
 	const innerFolder = path.join(folderPath, folderNumber.toString());
-
 	log(`Processing folder ${innerFolder}`, "detailed");
 
 	const processedImages: RGB[] = [];
@@ -227,7 +205,6 @@ async function processFolder(
 	}
 
 	log(`Finished processing folder ${innerFolder}`, "detailed");
-
 	return processedImages;
 }
 
@@ -238,11 +215,8 @@ async function folderToStream(
 	processingFunction: ProcessFunction,
 	opts: ProcessOpts = {},
 ): Promise<Buffer> {
-	log(`Making average image for folder ${folderPath}/${folderNumber}`, "detailed");
 	const processedImages = await processFolder(folderPath, folderNumber, processingFunction, opts);
-
 	const height = processedImages.length;
-
 	const buffer = Buffer.allocUnsafe(width * height * 3);
 
 	processedImages.forEach((p, row) => {
@@ -254,8 +228,7 @@ async function folderToStream(
 		}
 	});
 
-	log(`Made average image of ${folderPath}/${folderNumber}`, "basic");
-
+	log(`Made processed image of ${folderPath}/${folderNumber}`, "basic");
 	return buffer;
 }
 
@@ -286,6 +259,7 @@ async function processRange(
 		results.push(...batchResults);
 	}
 
+	// Assemble final buffer
 	for (const { x, stripBuffer } of results) {
 		for (let y = 0; y < tileHeight; y++) {
 			const srcIdx = y * 3;
@@ -308,6 +282,7 @@ async function main(
 	opts: ProcessOpts = {},
 ) {
 	log(`Processing range ${min}-${max} with operation ${processingFunction}`, "basic");
+	const startTime = Date.now();
 
 	const processedFolders = await processRange(
 		archivePath,
@@ -319,35 +294,39 @@ async function main(
 	);
 
 	const width = max - min + 1;
-
 	const suffixes = Object.keys(opts)
 		.filter((k) => opts[k])
 		.map((k) => optionsToSuffix[k])
 		.join("");
 
-	sharp(processedFolders, { raw: { width, height: tileHeight, channels: 3 } }).toFile(
+	await sharp(processedFolders, { raw: { width, height: tileHeight, channels: 3 } }).toFile(
 		path.join(wPlacePath, `${processingFunction} ${min}-${max}${suffixes}.png`),
 	);
-	log(`Finished processing range ${min}-${max}`, "basic");
+
+	const endTime = Date.now();
+	log(
+		`Finished processing range ${min}-${max} in ${((endTime - startTime) / 1000).toFixed(1)}s`,
+		"basic",
+	);
 }
 
 // Config: the configuration continues
-const EXTRACT = false;
+const extract = false;
 const archiveName = "tiles-15";
+const concurrency = 32;
 
 let archivePath = path.join(wPlacePath, `${archiveName}-extracted`);
 
-if (EXTRACT) {
+if (extract) {
 	archivePath = path.join(wPlacePath, `_extract_${Date.now()}`);
 	await extractArchiveToFolder(`${wPlacePath}/${archiveName}.7z`, archivePath);
-
 	archivePath = path.join(archivePath, archiveName);
 }
 
-await main(archivePath, 0, 2047, 16, "average", { includeTransparency: true });
-await main(archivePath, 0, 2047, 16, "average", { includeTransparency: false });
-await main(archivePath, 0, 2047, 16, "mode", { includeBlack: true });
-await main(archivePath, 0, 2047, 16, "mode", { includeBlack: false });
-await main(archivePath, 0, 2047, 16, "count");
+await main(archivePath, 0, 2047, concurrency, "average", { includeTransparency: true });
+await main(archivePath, 0, 2047, concurrency, "average", { includeTransparency: false });
+await main(archivePath, 0, 2047, concurrency, "mode", { includeBlack: true });
+await main(archivePath, 0, 2047, concurrency, "mode", { includeBlack: false });
+await main(archivePath, 0, 2047, concurrency, "count");
 
-if (EXTRACT) fs.rmSync(archivePath, { recursive: true, force: true });
+if (extract) fs.rmSync(archivePath, { recursive: true, force: true });

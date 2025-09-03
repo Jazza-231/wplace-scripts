@@ -12,7 +12,7 @@ const archive = `${wPlacePath}/${archiveName}.7z`;
 const tileHeight = 2048;
 const detailedLogs = false;
 
-type AverageOpts = { transparency?: boolean };
+type AverageOpts = { includeTransparency?: boolean; includeBlack?: boolean };
 type RGB = { r: number; g: number; b: number };
 type HSL = { h: number; s: number; l: number };
 
@@ -63,11 +63,11 @@ async function averageImage(stream: Stream.Readable | string, opts: AverageOpts 
 		sumA = 0;
 	for (let i = 0; i < rgba.length; i += 4) {
 		const a = rgba[i + 3] / 255;
-		if (a <= 0 && !opts.transparency) continue;
+		if (a <= 0 && !opts.includeTransparency) continue;
 		sumR += rgba[i] * a;
 		sumG += rgba[i + 1] * a;
 		sumB += rgba[i + 2] * a;
-		sumA += opts.transparency ? 1 : a;
+		sumA += opts.includeTransparency ? 1 : a;
 	}
 
 	const nonTransparent =
@@ -82,7 +82,7 @@ async function averageImage(stream: Stream.Readable | string, opts: AverageOpts 
 	return nonTransparent;
 }
 
-async function modeImage(stream: Stream.Readable | string) {
+async function modeImage(stream: Stream.Readable | string, opts: AverageOpts = {}) {
 	const image = streamToSharp(stream);
 
 	const rgba = await image.ensureAlpha().raw().toBuffer();
@@ -95,6 +95,7 @@ async function modeImage(stream: Stream.Readable | string) {
 		const b = rgba[i + 2];
 		const a = rgba[i + 3] / 255;
 		if (a <= 0) continue;
+		if (!opts.includeBlack && r + b + g === 0) continue;
 
 		const key = `${r},${g},${b}`;
 		counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -115,7 +116,7 @@ async function modeImage(stream: Stream.Readable | string) {
 	return { r, g, b };
 }
 
-async function countImage(stream: Stream.Readable | string) {
+async function countImage(stream: Stream.Readable | string, opts: AverageOpts = {}) {
 	const image = streamToSharp(stream);
 
 	const rgba = await image.ensureAlpha().raw().toBuffer();
@@ -170,8 +171,8 @@ async function averageFolder(folderPath: string, folderNumber: number, opts: Ave
 		if (!fs.existsSync(filePath)) averages.push({ r: 0, g: 0, b: 0 });
 		else {
 			// const avg = await averageImage(filePath, opts);
-			// const avg = await modeImage(filePath);
-			const avg = await countImage(filePath);
+			// const avg = await modeImage(filePath, opts);
+			const avg = await countImage(filePath, opts);
 			if (!avg) averages.push({ r: 0, g: 0, b: 0 });
 			else averages.push(avg);
 		}
@@ -261,7 +262,7 @@ async function main(
 	const width = max - min + 1;
 
 	sharp(averages, { raw: { width, height: tileHeight, channels: 3 } }).toFile(
-		path.join(wPlacePath, `count ${min}-${max}${opts.transparency ? "-t" : ""}.png`),
+		path.join(wPlacePath, `count ${min}-${max}${opts.includeTransparency ? "-t" : ""}.png`),
 	);
 }
 
@@ -273,7 +274,7 @@ let archivePath = path.join(wPlacePath, `${archiveName}-extracted`, archiveName)
 // archivePath = path.join(archivePath, archiveName);
 
 console.log("Doing transparency: false");
-await main(archivePath, 0, 2047, 50, { transparency: false });
+await main(archivePath, 0, 2047, 50, { includeTransparency: false, includeBlack: false });
 // console.log("Doing transparency: true");
 // await main(archivePath, 0, 2047, 30, { transparency: true });
 

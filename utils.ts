@@ -344,10 +344,10 @@ if (EXTRACT) {
 	archivePath = path.join(archivePath, archiveName);
 }
 
-await main(archivePath, 0, 2047, 10, "average", { includeTransparency: true });
-await main(archivePath, 0, 2047, 10, "average", { includeTransparency: false });
-await main(archivePath, 0, 2047, 10, "mode", { includeBlack: true });
-await main(archivePath, 0, 2047, 10, "mode", { includeBlack: false });
-await main(archivePath, 0, 2047, 10, "count");
+await main(archivePath, 0, 2047, 16, "average", { includeTransparency: true });
+await main(archivePath, 0, 2047, 16, "average", { includeTransparency: false });
+await main(archivePath, 0, 2047, 16, "mode", { includeBlack: true });
+await main(archivePath, 0, 2047, 16, "mode", { includeBlack: false });
+await main(archivePath, 0, 2047, 16, "count");
 
 if (EXTRACT) fs.rmSync(archivePath, { recursive: true, force: true });

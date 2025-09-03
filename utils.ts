@@ -12,9 +12,10 @@ const archive = `${wPlacePath}/${archiveName}.7z`;
 const tileHeight = 2048;
 const detailedLogs = false;
 
-type AverageOpts = { includeTransparency?: boolean; includeBlack?: boolean };
+type ProcessOpts = { includeTransparency?: boolean; includeBlack?: boolean };
 type RGB = { r: number; g: number; b: number };
 type HSL = { h: number; s: number; l: number };
+type ProcessFunction = (stream: Stream.Readable | string, opts: ProcessOpts) => Promise<RGB | null>;
 
 // https://stackoverflow.com/a/9493060/119527
 function hslToRgb(hsl: HSL) {
@@ -53,7 +54,7 @@ function streamToSharp(stream: Stream.Readable | string) {
 	return image;
 }
 
-async function averageImage(stream: Stream.Readable | string, opts: AverageOpts = {}) {
+async function averageImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
 	const image = streamToSharp(stream);
 
 	const rgba = await image.ensureAlpha().raw().toBuffer();
@@ -82,7 +83,7 @@ async function averageImage(stream: Stream.Readable | string, opts: AverageOpts 
 	return nonTransparent;
 }
 
-async function modeImage(stream: Stream.Readable | string, opts: AverageOpts = {}) {
+async function modeImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
 	const image = streamToSharp(stream);
 
 	const rgba = await image.ensureAlpha().raw().toBuffer();
@@ -116,7 +117,7 @@ async function modeImage(stream: Stream.Readable | string, opts: AverageOpts = {
 	return { r, g, b };
 }
 
-async function countImage(stream: Stream.Readable | string, opts: AverageOpts = {}) {
+async function countImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
 	const image = streamToSharp(stream);
 
 	const rgba = await image.ensureAlpha().raw().toBuffer();
@@ -158,46 +159,50 @@ function extractArchiveToFolder(archive: string, destDir: string) {
 	});
 }
 
-async function averageFolder(folderPath: string, folderNumber: number, opts: AverageOpts = {}) {
-	if (detailedLogs) console.log(`Getting average for ${folderPath}/${folderNumber}`);
+async function processFolder(
+	folderPath: string,
+	folderNumber: number,
+	processingFunction: ProcessFunction,
+	opts: ProcessOpts = {},
+) {
+	if (detailedLogs) console.log(`Processing ${folderPath}/${folderNumber}`);
 
 	const innerFolder = path.join(folderPath, folderNumber.toString());
 
-	const averages: RGB[] = [];
+	const processedImages: RGB[] = [];
 
 	for (let i = 0; i <= 2047; i++) {
 		const filePath = path.join(innerFolder, `${i}.png`);
 
-		if (!fs.existsSync(filePath)) averages.push({ r: 0, g: 0, b: 0 });
+		if (!fs.existsSync(filePath)) processedImages.push({ r: 0, g: 0, b: 0 });
 		else {
-			// const avg = await averageImage(filePath, opts);
-			// const avg = await modeImage(filePath, opts);
-			const avg = await countImage(filePath, opts);
-			if (!avg) averages.push({ r: 0, g: 0, b: 0 });
-			else averages.push(avg);
+			const processedImage = await processingFunction(filePath, opts);
+			if (!processedImage) processedImages.push({ r: 0, g: 0, b: 0 });
+			else processedImages.push(processedImage);
 		}
 	}
 
-	if (detailedLogs) console.log("Gotten averages");
+	if (detailedLogs) console.log("Processed");
 
-	return averages;
+	return processedImages;
 }
 
-async function folderToAverageStream(
+async function folderToStream(
 	folderPath: string,
 	folderNumber: number,
 	width: number = 1,
-	opts: AverageOpts = {},
+	processingFunction: ProcessFunction,
+	opts: ProcessOpts = {},
 ): Promise<Buffer> {
-	const averages = await averageFolder(folderPath, folderNumber, opts);
+	const processedImages = await processFolder(folderPath, folderNumber, processingFunction, opts);
 
-	const height = averages.length;
+	const height = processedImages.length;
 
 	const buffer = Buffer.allocUnsafe(width * height * 3);
 
-	if (detailedLogs) console.log("Making average image");
+	if (detailedLogs) console.log("Processing image");
 
-	averages.forEach((p, row) => {
+	processedImages.forEach((p, row) => {
 		for (let col = 0; col < width; col++) {
 			const offset = (row * width + col) * 3;
 			buffer[offset + 0] = p.r;
@@ -206,16 +211,17 @@ async function folderToAverageStream(
 		}
 	});
 
-	console.log(`Made average image of ${folderPath}/${folderNumber}`);
+	console.log(`Processed image of ${folderPath}/${folderNumber}`);
 
 	return buffer;
 }
 
-async function averageRange(
+async function processRange(
 	archivePath: string,
 	min: number,
 	max: number,
-	opts: AverageOpts = {},
+	processingFunction: ProcessFunction,
+	opts: ProcessOpts = {},
 	concurrency: number = 4,
 ): Promise<Buffer> {
 	const columns = max - min + 1;
@@ -227,7 +233,7 @@ async function averageRange(
 		const batch: Promise<{ x: number; stripBuffer: Buffer }>[] = [];
 		for (let x = i; x <= Math.min(i + concurrency - 1, max); x++) {
 			batch.push(
-				folderToAverageStream(archivePath, x, 1, opts).then((stripBuffer: Buffer) => ({
+				folderToStream(archivePath, x, 1, processingFunction, opts).then((stripBuffer: Buffer) => ({
 					x,
 					stripBuffer,
 				})),
@@ -255,27 +261,46 @@ async function main(
 	min: number,
 	max: number,
 	concurrency: number,
-	opts: AverageOpts,
+	processingFunction: ProcessFunction,
+	opts: ProcessOpts,
 ) {
-	const averages = await averageRange(archivePath, min, max, opts, concurrency);
+	const processedFolders = await processRange(
+		archivePath,
+		min,
+		max,
+		processingFunction,
+		opts,
+		concurrency,
+	);
 
 	const width = max - min + 1;
 
-	sharp(averages, { raw: { width, height: tileHeight, channels: 3 } }).toFile(
+	sharp(processedFolders, { raw: { width, height: tileHeight, channels: 3 } }).toFile(
 		path.join(wPlacePath, `count ${min}-${max}${opts.includeTransparency ? "-t" : ""}.png`),
 	);
 }
 
+const EXTRACT = false;
+const OPTIONS = {
+	includeTransparency: false,
+	includeBlack: false,
+};
+
+const functions = {
+	average: averageImage,
+	mode: modeImage,
+	count: countImage,
+};
+
 let archivePath = path.join(wPlacePath, `${archiveName}-extracted`, archiveName);
 
-// archivePath = path.join(wPlacePath, `_extract_${Date.now()}`);
-// await extractArchiveToFolder(archive, archivePath);
+if (EXTRACT) {
+	archivePath = path.join(wPlacePath, `_extract_${Date.now()}`);
+	await extractArchiveToFolder(archive, archivePath);
 
-// archivePath = path.join(archivePath, archiveName);
+	archivePath = path.join(archivePath, archiveName);
+}
 
-console.log("Doing transparency: false");
-await main(archivePath, 0, 2047, 50, { includeTransparency: false, includeBlack: false });
-// console.log("Doing transparency: true");
-// await main(archivePath, 0, 2047, 30, { transparency: true });
+await main(archivePath, 0, 2047, 50, functions.count, OPTIONS);
 
-// fs.rmSync(archivePath, { recursive: true, force: true });
+if (EXTRACT) fs.rmSync(archivePath, { recursive: true, force: true });

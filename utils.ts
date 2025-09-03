@@ -13,6 +13,35 @@ const tileHeight = 2048;
 const detailedLogs = false;
 
 type AverageOpts = { transparency?: boolean };
+type RGB = { r: number; g: number; b: number };
+type HSL = { h: number; s: number; l: number };
+
+// https://stackoverflow.com/a/9493060/119527
+function hslToRgb(hsl: HSL) {
+	let r: number, g: number, b: number;
+	const { h, s, l } = hsl;
+
+	if (s === 0) {
+		r = g = b = l; // achromatic
+	} else {
+		const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+		const p = 2 * l - q;
+		r = hueToRgb(p, q, h + 1 / 3);
+		g = hueToRgb(p, q, h);
+		b = hueToRgb(p, q, h - 1 / 3);
+	}
+
+	return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+}
+
+function hueToRgb(p: number, q: number, t: number) {
+	if (t < 0) t += 1;
+	if (t > 1) t -= 1;
+	if (t < 1 / 6) return p + (q - p) * 6 * t;
+	if (t < 1 / 2) return q;
+	if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+	return p;
+}
 
 function streamToSharp(stream: Stream.Readable | string) {
 	const image = sharp();
@@ -86,6 +115,24 @@ async function modeImage(stream: Stream.Readable | string) {
 	return { r, g, b };
 }
 
+async function countImage(stream: Stream.Readable | string) {
+	const image = streamToSharp(stream);
+
+	const rgba = await image.ensureAlpha().raw().toBuffer();
+	const pixels = rgba.length / 4;
+
+	let count = 0;
+	for (let i = 0; i < pixels; i += 4) {
+		const a = rgba[i + 3] / 255;
+		if (a > 0) count++;
+	}
+
+	const value = Math.log1p(count) / Math.log1p(pixels) ** 0.9;
+	const colour = hslToRgb({ h: value, s: 1, l: value * 0.6 });
+
+	return colour;
+}
+
 function ensureDir(p: string) {
 	if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 }
@@ -115,7 +162,7 @@ async function averageFolder(folderPath: string, folderNumber: number, opts: Ave
 
 	const innerFolder = path.join(folderPath, folderNumber.toString());
 
-	const averages: { r: number; g: number; b: number }[] = [];
+	const averages: RGB[] = [];
 
 	for (let i = 0; i <= 2047; i++) {
 		const filePath = path.join(innerFolder, `${i}.png`);
@@ -123,7 +170,8 @@ async function averageFolder(folderPath: string, folderNumber: number, opts: Ave
 		if (!fs.existsSync(filePath)) averages.push({ r: 0, g: 0, b: 0 });
 		else {
 			// const avg = await averageImage(filePath, opts);
-			const avg = await modeImage(filePath);
+			// const avg = await modeImage(filePath);
+			const avg = await countImage(filePath);
 			if (!avg) averages.push({ r: 0, g: 0, b: 0 });
 			else averages.push(avg);
 		}
@@ -213,7 +261,7 @@ async function main(
 	const width = max - min + 1;
 
 	sharp(averages, { raw: { width, height: tileHeight, channels: 3 } }).toFile(
-		path.join(wPlacePath, `mode ${min}-${max}${opts.transparency ? "-t" : ""}.png`),
+		path.join(wPlacePath, `count ${min}-${max}${opts.transparency ? "-t" : ""}.png`),
 	);
 }
 
@@ -225,7 +273,7 @@ let archivePath = path.join(wPlacePath, `${archiveName}-extracted`, archiveName)
 // archivePath = path.join(archivePath, archiveName);
 
 console.log("Doing transparency: false");
-await main(archivePath, 0, 2047, 30, { transparency: false });
+await main(archivePath, 0, 2047, 50, { transparency: false });
 // console.log("Doing transparency: true");
 // await main(archivePath, 0, 2047, 30, { transparency: true });
 

@@ -335,7 +335,7 @@ async function main(
 const EXTRACT = false;
 const archiveName = "tiles-15";
 
-let archivePath = path.join(wPlacePath, `${archiveName}-extracted`, archiveName);
+let archivePath = path.join(wPlacePath, `${archiveName}-extracted`);
 
 if (EXTRACT) {
 	archivePath = path.join(wPlacePath, `_extract_${Date.now()}`);

@@ -333,7 +333,7 @@ async function main(
 
 // Config: the configuration continues
 const EXTRACT = false;
-const archiveName = "tiles-20";
+const archiveName = "tiles-15";
 
 let archivePath = path.join(wPlacePath, `${archiveName}-extracted`, archiveName);
 
@@ -345,5 +345,9 @@ if (EXTRACT) {
 }
 
 await main(archivePath, 0, 2047, 10, "average", { includeTransparency: true });
+await main(archivePath, 0, 2047, 10, "average", { includeTransparency: false });
+await main(archivePath, 0, 2047, 10, "mode", { includeBlack: true });
+await main(archivePath, 0, 2047, 10, "mode", { includeBlack: false });
+await main(archivePath, 0, 2047, 10, "count");
 
 if (EXTRACT) fs.rmSync(archivePath, { recursive: true, force: true });

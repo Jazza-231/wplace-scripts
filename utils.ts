@@ -71,7 +71,7 @@ function hueToRgb(p: number, q: number, t: number) {
 	return p;
 }
 
-function streamToSharp(stream: Stream.Readable | string) {
+async function streamToBuffer(stream: Stream.Readable | string) {
 	const image = sharp();
 	if (typeof stream === "string") {
 		const file = stream;
@@ -79,7 +79,9 @@ function streamToSharp(stream: Stream.Readable | string) {
 		log(`Read ${file} to stream`, "all");
 	}
 	stream.pipe(image);
-	return image;
+	const buffer = await image.ensureAlpha().raw().toBuffer();
+
+	return buffer;
 }
 
 function ensureDir(p: string) {
@@ -109,8 +111,7 @@ function extractArchiveToFolder(archive: string, destDir: string) {
 
 // Processing functions
 async function averageImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
-	const image = streamToSharp(stream);
-	const rgba = await image.ensureAlpha().raw().toBuffer();
+	const rgba = await streamToBuffer(stream);
 	let sumR = 0,
 		sumG = 0,
 		sumB = 0,
@@ -135,8 +136,7 @@ async function averageImage(stream: Stream.Readable | string, opts: ProcessOpts 
 }
 
 async function modeImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
-	const image = streamToSharp(stream);
-	const rgba = await image.ensureAlpha().raw().toBuffer();
+	const rgba = await streamToBuffer(stream);
 	const counts = new Map<string, number>();
 
 	for (let i = 0; i < rgba.length; i += 4) {
@@ -167,8 +167,8 @@ async function modeImage(stream: Stream.Readable | string, opts: ProcessOpts = {
 }
 
 async function countImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
-	const image = streamToSharp(stream);
-	const rgba = await image.ensureAlpha().raw().toBuffer();
+	const rgba = await streamToBuffer(stream);
+
 	const pixels = rgba.length / 4;
 
 	let count = 0;
@@ -323,10 +323,10 @@ if (extract) {
 	archivePath = path.join(archivePath, archiveName);
 }
 
-await main(archivePath, 0, 2047, concurrency, "average", { includeTransparency: true });
-await main(archivePath, 0, 2047, concurrency, "average", { includeTransparency: false });
-await main(archivePath, 0, 2047, concurrency, "mode", { includeBlack: true });
-await main(archivePath, 0, 2047, concurrency, "mode", { includeBlack: false });
-await main(archivePath, 0, 2047, concurrency, "count");
+// await main(archivePath, 0, 2047, concurrency, "average", { includeTransparency: true });
+// await main(archivePath, 0, 2047, concurrency, "average", { includeTransparency: false });
+// await main(archivePath, 0, 2047, concurrency, "mode", { includeBlack: true });
+// await main(archivePath, 0, 2047, concurrency, "mode", { includeBlack: false });
+await main(archivePath, 1000, 1063, concurrency, "count");
 
 if (extract) fs.rmSync(archivePath, { recursive: true, force: true });

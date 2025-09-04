@@ -351,8 +351,8 @@ async function main(
 
 // Config: the configuration continues
 const extract = false;
-const archiveName = "tiles-15";
-const concurrency = 32;
+const archiveName = "tiles-22";
+const concurrency = 64;
 
 let archivePath = path.join(wPlacePath, `${archiveName}-extracted`);
 
@@ -362,10 +362,10 @@ if (extract) {
 	archivePath = path.join(archivePath, archiveName);
 }
 
-// await main(archivePath, 0, 2047, concurrency, "average", { includeTransparency: true });
-// await main(archivePath, 0, 2047, concurrency, "average", { includeTransparency: false });
-// await main(archivePath, 0, 2047, concurrency, "mode", { includeBlack: true });
-// await main(archivePath, 0, 2047, concurrency, "mode", { includeBlack: false });
-await main(archivePath, 1000, 1063, concurrency, "count");
+await main(archivePath, 0, 2047, concurrency, "average", { includeTransparency: true });
+await main(archivePath, 0, 2047, concurrency, "average", { includeTransparency: false });
+await main(archivePath, 0, 2047, concurrency, "mode", { includeBlack: true });
+await main(archivePath, 0, 2047, concurrency, "mode", { includeBlack: false });
+await main(archivePath, 0, 2047, concurrency, "count");
 
 if (extract) fs.rmSync(archivePath, { recursive: true, force: true });

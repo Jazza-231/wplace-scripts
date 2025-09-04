@@ -137,47 +137,86 @@ async function averageImage(stream: Stream.Readable | string, opts: ProcessOpts 
 
 async function modeImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
 	const rgba = await streamToBuffer(stream);
-	const counts = new Map<string, number>();
+	const u32 = new Uint32Array(rgba.buffer, rgba.byteOffset, rgba.byteLength >>> 2);
 
-	for (let i = 0; i < rgba.length; i += 4) {
-		const r = rgba[i];
-		const g = rgba[i + 1];
-		const b = rgba[i + 2];
-		const a = rgba[i + 3] / 255;
-		if (a <= 0) continue;
-		if (!opts.includeBlack && r + b + g === 0) continue;
+	const hist = new Uint32Array(1 << 24);
+	const touched: number[] = [];
 
-		const key = `${r},${g},${b}`;
-		counts.set(key, (counts.get(key) ?? 0) + 1);
-	}
+	let maxKey = 0;
+	let maxCount = 0;
+	const skipBlack = !opts.includeBlack;
 
-	if (counts.size === 0) return null;
+	for (let i = 0; i < u32.length; i++) {
+		const v = u32[i];
+		const a = v >>> 24;
+		if (a === 0) continue;
 
-	let maxKey = "";
-	let maxCount = -1;
-	for (const [key, count] of counts) {
-		if (count > maxCount) {
+		const key = v & 0x00ffffff;
+		if (skipBlack && key === 0) continue;
+
+		const c = hist[key] + 1;
+		if (hist[key] === 0) touched.push(key);
+		hist[key] = c;
+
+		if (c > maxCount) {
+			maxCount = c;
 			maxKey = key;
-			maxCount = count;
 		}
 	}
 
-	const [r, g, b] = maxKey.split(",").map(Number);
+	for (let i = 0; i < touched.length; i++) hist[touched[i]] = 0;
+
+	if (maxCount === 0) return null;
+
+	const r = maxKey & 0xff;
+	const g = (maxKey >>> 8) & 0xff;
+	const b = (maxKey >>> 16) & 0xff;
 	return { r, g, b };
 }
 
-async function countImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
-	const rgba = await streamToBuffer(stream);
-
-	const pixels = rgba.length / 4;
+function countNonTransparent(rgba: Uint8Array): number {
+	// Treat the buffer as 32-bit words: [R,G,B,A] -> A is the top byte on little-endian
+	const u32 = new Uint32Array(rgba.buffer, rgba.byteOffset, Math.floor(rgba.byteLength / 4));
 
 	let count = 0;
-	for (let i = 0; i < rgba.length; i += 4) {
-		const a = rgba[i + 3] / 255;
-		if (a > 0) count++;
+	// Manual unroll for a bit more throughput
+	const n = u32.length;
+	let i = 0;
+	const step = 8;
+	for (; i + step <= n; i += step) {
+		const v0 = u32[i] >>> 24;
+		const v1 = u32[i + 1] >>> 24;
+		const v2 = u32[i + 2] >>> 24;
+		const v3 = u32[i + 3] >>> 24;
+		const v4 = u32[i + 4] >>> 24;
+		const v5 = u32[i + 5] >>> 24;
+		const v6 = u32[i + 6] >>> 24;
+		const v7 = u32[i + 7] >>> 24;
+		count +=
+			(v0 !== 0 ? 1 : 0) +
+			(v1 !== 0 ? 1 : 0) +
+			(v2 !== 0 ? 1 : 0) +
+			(v3 !== 0 ? 1 : 0) +
+			(v4 !== 0 ? 1 : 0) +
+			(v5 !== 0 ? 1 : 0) +
+			(v6 !== 0 ? 1 : 0) +
+			(v7 !== 0 ? 1 : 0);
 	}
+	for (; i < n; i++) {
+		count += u32[i] >>> 24 !== 0 ? 1 : 0;
+	}
+	return count;
+}
 
-	const value = Math.log1p(count) / Math.log1p(pixels) ** 0.9;
+export async function countImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
+	const rgba = await streamToBuffer(stream);
+
+	// pixels is just length / 4
+	const pixels = rgba.length >>> 2;
+
+	const count = countNonTransparent(rgba);
+
+	const value = Math.log1p(count) / Math.pow(Math.log1p(pixels), 0.9);
 	return hslToRgb({ h: value, s: 1, l: value * 0.6 });
 }
 

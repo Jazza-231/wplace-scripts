@@ -368,6 +368,9 @@ async function main(archiveNumber: number, extract: boolean = false) {
 
 	if (extract) {
 		extractTo = path.join(wPlacePath, `_extract-${archiveNumber}_${Date.now()}`);
+
+		console.log(`Extracting ${archiveName} to ${extractTo}`);
+
 		await extractArchiveToFolder(`${wPlacePath}/${archiveName}.7z`, extractTo);
 		extractTo = path.join(extractTo, archiveName);
 	}
@@ -378,7 +381,10 @@ async function main(archiveNumber: number, extract: boolean = false) {
 	await runProcessor(extractTo, 0, 2047, concurrency, "mode", { includeBlack: false });
 	await runProcessor(extractTo, 0, 2047, concurrency, "count");
 
-	if (extract) fs.rmSync(extractTo, { recursive: true, force: true });
+	if (extract) {
+		console.log(`Cleaning up ${extractTo}`);
+		fs.rmSync(extractTo, { recursive: true, force: true });
+	}
 }
 
 for (let i = 1; i < 25; i++) {

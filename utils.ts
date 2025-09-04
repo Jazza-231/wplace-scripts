@@ -312,22 +312,28 @@ async function processRange(
 	return outBuffer;
 }
 
-async function main(
+async function runProcessor(
 	archivePath: string,
 	min: number,
 	max: number,
 	concurrency: number,
-	processingFunction: keyof typeof FUNCTIONS,
+	processingFunctionName: keyof typeof FUNCTIONS,
 	opts: ProcessOpts = {},
 ) {
-	log(`Processing range ${min}-${max} with operation ${processingFunction}`, "basic");
+	const numberRegex = /tiles-(\d+)/;
+	const archiveNumber = numberRegex.exec(archivePath)?.[1];
+
+	log(
+		`Processing range ${min}-${max} with operation ${processingFunctionName} on tiles-${archiveNumber}`,
+		"basic",
+	);
 	const startTime = Date.now();
 
 	const processedFolders = await processRange(
 		archivePath,
 		min,
 		max,
-		FUNCTIONS[processingFunction],
+		FUNCTIONS[processingFunctionName],
 		opts,
 		concurrency,
 	);
@@ -339,7 +345,10 @@ async function main(
 		.join("");
 
 	await sharp(processedFolders, { raw: { width, height: tileHeight, channels: 3 } }).toFile(
-		path.join(wPlacePath, `${processingFunction} ${min}-${max}${suffixes}.png`),
+		path.join(
+			wPlacePath,
+			`${processingFunctionName} ${min}-${max}${suffixes}-${archiveNumber}.png`,
+		),
 	);
 
 	const endTime = Date.now();
@@ -350,22 +359,28 @@ async function main(
 }
 
 // Config: the configuration continues
-const extract = false;
-const archiveName = "tiles-22";
 const concurrency = 64;
 
-let archivePath = path.join(wPlacePath, `${archiveName}-extracted`);
+async function main(archiveNumber: number, extract: boolean = false) {
+	const archiveName = `tiles-${archiveNumber}`;
 
-if (extract) {
-	archivePath = path.join(wPlacePath, `_extract_${Date.now()}`);
-	await extractArchiveToFolder(`${wPlacePath}/${archiveName}.7z`, archivePath);
-	archivePath = path.join(archivePath, archiveName);
+	let extractTo = path.join(wPlacePath, `${archiveName}-extracted`);
+
+	if (extract) {
+		extractTo = path.join(wPlacePath, `_extract-${archiveNumber}_${Date.now()}`);
+		await extractArchiveToFolder(`${wPlacePath}/${archiveName}.7z`, extractTo);
+		extractTo = path.join(extractTo, archiveName);
+	}
+
+	await runProcessor(extractTo, 0, 2047, concurrency, "average", { includeTransparency: true });
+	await runProcessor(extractTo, 0, 2047, concurrency, "average", { includeTransparency: false });
+	await runProcessor(extractTo, 0, 2047, concurrency, "mode", { includeBlack: true });
+	await runProcessor(extractTo, 0, 2047, concurrency, "mode", { includeBlack: false });
+	await runProcessor(extractTo, 0, 2047, concurrency, "count");
+
+	if (extract) fs.rmSync(extractTo, { recursive: true, force: true });
 }
 
-await main(archivePath, 0, 2047, concurrency, "average", { includeTransparency: true });
-await main(archivePath, 0, 2047, concurrency, "average", { includeTransparency: false });
-await main(archivePath, 0, 2047, concurrency, "mode", { includeBlack: true });
-await main(archivePath, 0, 2047, concurrency, "mode", { includeBlack: false });
-await main(archivePath, 0, 2047, concurrency, "count");
-
-if (extract) fs.rmSync(archivePath, { recursive: true, force: true });
+for (let i = 1; i < 25; i++) {
+	await main(i, true);
+}

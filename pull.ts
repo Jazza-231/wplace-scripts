@@ -312,7 +312,7 @@ interface Task {
 	err?: any;
 }
 
-const MAX_ATTEMPTS = 5;
+const MAX_ATTEMPTS = 20;
 const BASE_DELAY_MS = 400;
 const BACKOFF = 1.6;
 const JITTER_MS = 200;
@@ -392,6 +392,7 @@ function retryTask(task: Task, err: any) {
 	if (task.attempts >= MAX_ATTEMPTS) {
 		// Give up on life
 		task.status = "error";
+		console.error(`Giving up on ${task.coords.x}/${task.coords.y} after ${task.attempts} attempts`);
 
 		logErrorTask(task);
 		return;

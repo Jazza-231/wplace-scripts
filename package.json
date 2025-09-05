@@ -6,5 +6,8 @@
 		"sharp": "^0.34.3",
 		"tsx": "^4.20.5",
 		"undici": "^7.15.0"
+	},
+	"scripts": {
+		"build-go": "go build -o image-processor.exe main.go"
 	}
 }

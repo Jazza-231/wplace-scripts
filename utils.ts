@@ -25,7 +25,8 @@ const optionsToSuffix: Record<keyof ProcessOpts, string> = {
 type ProcessOpts = { includeTransparency?: boolean; includeBlack?: boolean };
 type RGB = { r: number; g: number; b: number };
 type HSL = { h: number; s: number; l: number };
-type ProcessFunction = (stream: Stream.Readable | string, opts: ProcessOpts) => Promise<RGB | null>;
+type RGBA = Buffer<ArrayBufferLike>;
+type ProcessFunction = (rgba: RGBA, opts: ProcessOpts) => Promise<RGB | null>;
 
 // Helpers
 function log(message: any, level: "basic" | "detailed" | "all" = "basic") {
@@ -71,14 +72,16 @@ function hueToRgb(p: number, q: number, t: number) {
 	return p;
 }
 
-async function streamToBuffer(stream: Stream.Readable | string) {
+async function streamOrPathToBuffer(streamOrPath: Stream.Readable | string): Promise<RGBA> {
 	const image = sharp();
-	if (typeof stream === "string") {
-		const file = stream;
-		stream = fs.createReadStream(file);
+	if (typeof streamOrPath === "string") {
+		if (!fs.existsSync(streamOrPath))
+			throw new Error(`File ${streamOrPath} does not exist`, { cause: "file-missing" });
+		const file = streamOrPath;
+		streamOrPath = fs.createReadStream(file);
 		log(`Read ${file} to stream`, "all");
 	}
-	stream.pipe(image);
+	streamOrPath.pipe(image);
 	const buffer = await image.ensureAlpha().raw().toBuffer();
 
 	return buffer;
@@ -110,19 +113,18 @@ function extractArchiveToFolder(archive: string, destDir: string) {
 }
 
 // Processing functions
-async function averageImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
-	const rgba = await streamToBuffer(stream);
+async function averageImage(rgbaBuf: RGBA, opts: ProcessOpts = {}) {
 	let sumR = 0,
 		sumG = 0,
 		sumB = 0,
 		sumA = 0;
 
-	for (let i = 0; i < rgba.length; i += 4) {
-		const a = rgba[i + 3] / 255;
+	for (let i = 0; i < rgbaBuf.length; i += 4) {
+		const a = rgbaBuf[i + 3] / 255;
 		if (a <= 0 && !opts.includeTransparency) continue;
-		sumR += rgba[i] * a;
-		sumG += rgba[i + 1] * a;
-		sumB += rgba[i + 2] * a;
+		sumR += rgbaBuf[i] * a;
+		sumG += rgbaBuf[i + 1] * a;
+		sumB += rgbaBuf[i + 2] * a;
 		sumA += opts.includeTransparency ? 1 : a;
 	}
 
@@ -135,9 +137,8 @@ async function averageImage(stream: Stream.Readable | string, opts: ProcessOpts 
 		: null;
 }
 
-async function modeImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
-	const rgba = await streamToBuffer(stream);
-	const u32 = new Uint32Array(rgba.buffer, rgba.byteOffset, rgba.byteLength >>> 2);
+async function modeImage(rgbaBuf: RGBA, opts: ProcessOpts = {}) {
+	const u32 = new Uint32Array(rgbaBuf.buffer, rgbaBuf.byteOffset, rgbaBuf.byteLength >>> 2);
 
 	const hist = new Uint32Array(1 << 24);
 	const touched: number[] = [];
@@ -208,13 +209,11 @@ function countNonTransparent(rgba: Uint8Array): number {
 	return count;
 }
 
-export async function countImage(stream: Stream.Readable | string, opts: ProcessOpts = {}) {
-	const rgba = await streamToBuffer(stream);
-
+export async function countImage(rgbaBuf: RGBA, opts: ProcessOpts = {}) {
 	// pixels is just length / 4
-	const pixels = rgba.length >>> 2;
+	const pixels = rgbaBuf.length >>> 2;
 
-	const count = countNonTransparent(rgba);
+	const count = countNonTransparent(rgbaBuf);
 
 	const value = Math.log1p(count) / Math.pow(Math.log1p(pixels), 0.9);
 	return hslToRgb({ h: value, s: 1, l: value * 0.6 });
@@ -235,12 +234,16 @@ async function processFolder(
 	for (let i = 0; i <= tileHeight - 1; i++) {
 		const filePath = path.join(innerFolder, `${i}.png`);
 
-		if (!fs.existsSync(filePath)) processedImages.push({ r: 0, g: 0, b: 0 });
-		else {
-			const processedImage = await processingFunction(filePath, opts);
-			if (!processedImage) processedImages.push({ r: 0, g: 0, b: 0 });
-			else processedImages.push(processedImage);
-		}
+		streamOrPathToBuffer(filePath)
+			.then(async (rgbaBuf) => {
+				const processedImage = await processingFunction(rgbaBuf, opts);
+				if (!processedImage) processedImages.push({ r: 0, g: 0, b: 0 });
+				else processedImages.push(processedImage);
+			})
+			.catch((e: Error) => {
+				if (e.cause === "file-missing") processedImages.push({ r: 0, g: 0, b: 0 });
+				else throw e;
+			});
 	}
 
 	log(`Finished processing folder ${innerFolder}`, "detailed");
@@ -356,6 +359,27 @@ async function runProcessor(
 		`Finished processing range ${min}-${max} in ${((endTime - startTime) / 1000).toFixed(1)}s`,
 		"basic",
 	);
+
+	const results = {
+		archiveNumber,
+		processingFunctionName,
+		min,
+		max,
+		timeTaken: ((endTime - startTime) / 1000).toFixed(1),
+	};
+
+	ensureDir(path.join(wPlacePath, "logs"));
+	fs.writeFileSync(
+		path.join(
+			wPlacePath,
+			"logs",
+			`${processingFunctionName}-${archiveNumber}-${new Date()
+				.toISOString()
+				.replace(/[:.]/g, "-")}.json`,
+		),
+		JSON.stringify(results),
+		"utf8",
+	);
 }
 
 // Config: the configuration continues
@@ -375,10 +399,10 @@ async function main(archiveNumber: number, extract: boolean = false) {
 		extractTo = path.join(extractTo, archiveName);
 	}
 
-	await runProcessor(extractTo, 0, 2047, concurrency, "average", { includeTransparency: true });
-	await runProcessor(extractTo, 0, 2047, concurrency, "average", { includeTransparency: false });
-	await runProcessor(extractTo, 0, 2047, concurrency, "mode", { includeBlack: true });
-	await runProcessor(extractTo, 0, 2047, concurrency, "mode", { includeBlack: false });
+	// await runProcessor(extractTo, 0, 2047, concurrency, "average", { includeTransparency: true });
+	// await runProcessor(extractTo, 0, 2047, concurrency, "average", { includeTransparency: false });
+	// await runProcessor(extractTo, 0, 2047, concurrency, "mode", { includeBlack: true });
+	// await runProcessor(extractTo, 0, 2047, concurrency, "mode", { includeBlack: false });
 	await runProcessor(extractTo, 0, 2047, concurrency, "count");
 
 	if (extract) {
@@ -387,6 +411,6 @@ async function main(archiveNumber: number, extract: boolean = false) {
 	}
 }
 
-for (let i = 1; i < 25; i++) {
+for (let i = 1; i < 27; i++) {
 	await main(i, true);
 }

@@ -24,9 +24,10 @@ const optionsToSuffix: Record<keyof ProcessOpts, string> = {
 // Types
 type ProcessOpts = { includeTransparency?: boolean; includeBlack?: boolean };
 type RGB = { r: number; g: number; b: number };
-type HSL = { h: number; s: number; l: number };
 type RGBA = Buffer<ArrayBufferLike>;
-type ProcessFunction = (rgba: RGBA, opts: ProcessOpts) => Promise<RGB | null>;
+type HSL = { h: number; s: number; l: number };
+type StreamOrPath = Stream.Readable | string;
+type ProcessFunction = (streamOrPath: StreamOrPath, opts: ProcessOpts) => Promise<RGB | null>;
 
 // Helpers
 function log(message: any, level: "basic" | "detailed" | "all" = "basic") {
@@ -113,7 +114,8 @@ function extractArchiveToFolder(archive: string, destDir: string) {
 }
 
 // Processing functions
-async function averageImage(rgbaBuf: RGBA, opts: ProcessOpts = {}) {
+async function averageImage(streamOrPath: StreamOrPath, opts: ProcessOpts = {}) {
+	const rgbaBuf = await streamOrPathToBuffer(streamOrPath);
 	let sumR = 0,
 		sumG = 0,
 		sumB = 0,
@@ -137,7 +139,8 @@ async function averageImage(rgbaBuf: RGBA, opts: ProcessOpts = {}) {
 		: null;
 }
 
-async function modeImage(rgbaBuf: RGBA, opts: ProcessOpts = {}) {
+async function modeImage(streamOrPath: StreamOrPath, opts: ProcessOpts = {}) {
+	const rgbaBuf = await streamOrPathToBuffer(streamOrPath);
 	const u32 = new Uint32Array(rgbaBuf.buffer, rgbaBuf.byteOffset, rgbaBuf.byteLength >>> 2);
 
 	const hist = new Uint32Array(1 << 24);
@@ -209,7 +212,8 @@ function countNonTransparent(rgba: Uint8Array): number {
 	return count;
 }
 
-export async function countImage(rgbaBuf: RGBA, opts: ProcessOpts = {}) {
+export async function countImage(streamOrPath: StreamOrPath, opts: ProcessOpts = {}) {
+	const rgbaBuf = await streamOrPathToBuffer(streamOrPath);
 	// pixels is just length / 4
 	const pixels = rgbaBuf.length >>> 2;
 
@@ -234,16 +238,12 @@ async function processFolder(
 	for (let i = 0; i <= tileHeight - 1; i++) {
 		const filePath = path.join(innerFolder, `${i}.png`);
 
-		streamOrPathToBuffer(filePath)
-			.then(async (rgbaBuf) => {
-				const processedImage = await processingFunction(rgbaBuf, opts);
-				if (!processedImage) processedImages.push({ r: 0, g: 0, b: 0 });
-				else processedImages.push(processedImage);
-			})
-			.catch((e: Error) => {
-				if (e.cause === "file-missing") processedImages.push({ r: 0, g: 0, b: 0 });
-				else throw e;
-			});
+		if (!fs.existsSync(filePath)) processedImages.push({ r: 0, g: 0, b: 0 });
+		else {
+			const processedImage = await processingFunction(filePath, opts);
+			if (!processedImage) processedImages.push({ r: 0, g: 0, b: 0 });
+			else processedImages.push(processedImage);
+		}
 	}
 
 	log(`Finished processing folder ${innerFolder}`, "detailed");
@@ -383,7 +383,7 @@ async function runProcessor(
 }
 
 // Config: the configuration continues
-const concurrency = 64;
+const concurrency = 32;
 
 async function main(archiveNumber: number, extract: boolean = false) {
 	const archiveName = `tiles-${archiveNumber}`;

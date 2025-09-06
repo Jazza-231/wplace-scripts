@@ -42,7 +42,7 @@ type Result struct {
 func main() {
 	startTime := time.Now()
 
-	const width, height = 1000, 1000
+	const width, height = 2048, 2048
 	numWorkers := 64
 
 	jobs := make(chan Job, 1000)

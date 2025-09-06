@@ -147,10 +147,14 @@ func main() {
 func worker(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for job := range jobs {
-		rgb, err := processPath("count",
-			fmt.Sprintf("C:/Users/jazza/Downloads/wplace/tiles-30/tiles-30/%d/%d.png", job.x, job.y),
-			ProcessOpts{})
+		filepath := fmt.Sprintf("C:/Users/jazza/Downloads/wplace/tiles-30/tiles-30/%d/%d.png", job.x, job.y)
 
+		if _, err := os.Stat(filepath); os.IsNotExist(err) {
+			results <- Result{x: job.x, y: job.y, rgb: RGB{0, 0, 0}}
+			continue
+		}
+
+		rgb, err := processPath("count", filepath, ProcessOpts{})
 		if err != nil {
 			rgb = RGB{R: 0, G: 0, B: 0}
 		}

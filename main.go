@@ -65,8 +65,9 @@ func main() {
 	}()
 
 	pixelData := make([][]RGB, width)
+	allPixels := make([]RGB, width*height)
 	for i := range pixelData {
-		pixelData[i] = make([]RGB, height)
+		pixelData[i] = allPixels[i*height : (i+1)*height]
 	}
 
 	go func() {

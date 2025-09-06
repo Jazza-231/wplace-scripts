@@ -2,13 +2,14 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"math"
 	"os"
 	"runtime"
+	"sync"
 )
 
 type RGB struct {
@@ -28,20 +29,105 @@ type ProcessOpts struct {
 	IncludeBoring       bool `json:"includeBoring"`
 }
 
+type Job struct {
+	x, y int
+}
+
+type Result struct {
+	x, y int
+	rgb  RGB
+}
+
 func main() {
-	if len(os.Args) < 4 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <function> <filepath> <options>\n", os.Args[0])
+	const width, height = 2048, 2048
+	numWorkers := 50
+
+	jobs := make(chan Job, 1000)
+	results := make(chan Result, 1000)
+
+	var wg sync.WaitGroup
+
+	for range numWorkers {
+		wg.Add(1)
+		go worker(jobs, results, &wg)
 	}
 
-	function := os.Args[1]
-	filepath := os.Args[2]
-	optsJson := os.Args[3]
+	go func() {
+		defer close(jobs)
+		for x := range width {
+			for y := range height {
+				jobs <- Job{x: x, y: y}
+			}
+		}
+	}()
 
-	var opts ProcessOpts
-	if err := json.Unmarshal([]byte(optsJson), &opts); err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid options: %v\n", err)
-		os.Exit(1)
+	pixelData := make([][]RGB, width)
+	for i := range pixelData {
+		pixelData[i] = make([]RGB, height)
 	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	processed := 0
+	total := width * height
+
+	for result := range results {
+		pixelData[result.x][result.y] = result.rgb
+
+		processed++
+
+		if processed%10_000 == 0 {
+			fmt.Printf("Processed %d/%d pixels (%.1f%%)\n",
+				processed, total, float64(processed)/float64(total)*100)
+		}
+	}
+
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+
+	for x := range width {
+		for y := range height {
+			rgb := pixelData[x][y]
+			img.Set(x, y, color.RGBA{
+				R: rgb.R,
+				G: rgb.G,
+				B: rgb.B,
+				A: 255,
+			})
+		}
+	}
+
+	file, err := os.Create("C:/Users/jazza/Downloads/wplace/output.png")
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	if err := png.Encode(file, img); err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Image saved successfully!")
+}
+
+func worker(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for job := range jobs {
+		rgb, err := processPath("count",
+			fmt.Sprintf("C:/Users/jazza/Downloads/wplace/tiles-30/tiles-30/%d/%d.png", job.x, job.y),
+			ProcessOpts{})
+
+		if err != nil {
+			rgb = RGB{R: 0, G: 0, B: 0}
+		}
+
+		results <- Result{x: job.x, y: job.y, rgb: rgb}
+	}
+}
+
+func processPath(function string, filepath string, opts ProcessOpts) (RGB, error) {
 
 	var result RGB
 	var err error
@@ -66,7 +152,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	json.NewEncoder(os.Stdout).Encode(result)
+	return result, nil
 
 }
 
@@ -100,7 +186,7 @@ func imageFromFile(filepath string) (*image.RGBA, error) {
 func averageImageFromFile(filepath string, opts ProcessOpts) (RGB, error) {
 	img, err := imageFromFile(filepath)
 	if err != nil {
-		return RGB{}, err
+		return RGB{0, 0, 0}, nil
 	}
 
 	bounds := img.Bounds()
@@ -172,7 +258,7 @@ func countImageFromFile(filepath string) (RGB, error) {
 
 	img, err := imageFromFile(filepath)
 	if err != nil {
-		return RGB{}, err
+		return RGB{0, 0, 0}, nil
 	}
 
 	bounds := img.Bounds()
@@ -214,8 +300,6 @@ func countRGBA(pixels []uint8, width, height int) (RGB, error) {
 		res := <-results
 		totalCount += res.count
 	}
-
-	fmt.Fprintf(os.Stderr, "totalCount: %f\n", totalCount)
 
 	const (
 		fracAtHalf = 0.10 // want value=0.5 at this total/pixel fraction
@@ -291,7 +375,7 @@ func hueToRgb(p, q, t float64) float64 {
 func modeImageFromFile(filepath string, opts ProcessOpts) (RGB, error) {
 	img, err := imageFromFile(filepath)
 	if err != nil {
-		return RGB{}, err
+		return RGB{0, 0, 0}, nil
 	}
 
 	bounds := img.Bounds()

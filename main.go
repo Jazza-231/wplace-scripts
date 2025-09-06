@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -39,6 +40,24 @@ type Result struct {
 	rgb  RGB
 }
 
+func preCheckExistingFiles(width int) map[string]bool {
+	existing := make(map[string]bool)
+	basePath := "C:/Users/jazza/Downloads/wplace/tiles-30/tiles-30"
+
+	for x := range width {
+		dirPath := fmt.Sprintf("%s/%d", basePath, x)
+		if entries, err := os.ReadDir(dirPath); err == nil {
+			for _, entry := range entries {
+				if strings.HasSuffix(entry.Name(), ".png") {
+					key := fmt.Sprintf("%s/%s", dirPath, entry.Name())
+					existing[key] = true
+				}
+			}
+		}
+	}
+	return existing
+}
+
 func main() {
 	startTime := time.Now()
 
@@ -47,12 +66,13 @@ func main() {
 
 	jobs := make(chan Job, 1000)
 	results := make(chan Result, 1000)
+	existingFiles := preCheckExistingFiles(width)
 
 	var wg sync.WaitGroup
 
 	for range numWorkers {
 		wg.Add(1)
-		go worker(jobs, results, &wg)
+		go worker(jobs, results, &wg, existingFiles)
 	}
 
 	go func() {
@@ -145,12 +165,12 @@ func main() {
 	fmt.Printf("Average: %.2f pixels/second\n", float64(total)/totalTime.Seconds())
 }
 
-func worker(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup) {
+func worker(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup, existingFiles map[string]bool) {
 	defer wg.Done()
 	for job := range jobs {
 		filepath := fmt.Sprintf("C:/Users/jazza/Downloads/wplace/tiles-30/tiles-30/%d/%d.png", job.x, job.y)
 
-		if _, err := os.Stat(filepath); os.IsNotExist(err) {
+		if !existingFiles[filepath] {
 			results <- Result{x: job.x, y: job.y, rgb: RGB{0, 0, 0}}
 			continue
 		}

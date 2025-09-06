@@ -304,37 +304,13 @@ func countImageFromFile(filepath string) (RGB, error) {
 }
 
 func countRGBA(pixels []uint8, width, height int) (RGB, error) {
-	numWorkers := runtime.NumCPU()
-	pixelCount := width * height
-	chunkSize := pixelCount / numWorkers
-
-	type result struct{ count float64 }
-	results := make(chan result, numWorkers)
-
-	for i := range numWorkers {
-		go func(startPixel, endPixel int) {
-			var count float64
-
-			for pixel := startPixel; pixel < endPixel; pixel++ {
-				idx := pixel * 4
-				alpha := float64(pixels[idx+3]) / 255.0
-
-				// Skip fully transparent pixels unless we want to include them
-				if alpha <= 0 {
-					continue
-				}
-
-				count += 1.0
-			}
-			results <- result{count}
-		}(i*chunkSize, min((i+1)*chunkSize, pixelCount))
-	}
-
-	// Collect results
 	var totalCount float64
-	for range numWorkers {
-		res := <-results
-		totalCount += res.count
+	pixelCount := width * height
+
+	for i := 0; i < len(pixels); i += 4 {
+		if pixels[i+3] > 0 {
+			totalCount += 1.0
+		}
 	}
 
 	const (

@@ -334,7 +334,7 @@ func countRGBA(pixels []uint8, width, height int) (RGB, error) {
 	}
 
 	const (
-		fracAtHalf = 0.10 // want value=0.5 at this total/pixel fraction
+		fracAtHalf = 0.02 // want value=0.5 at this total/pixel fraction
 		hueExp     = 1.4  // >1 = linger near red longer
 		lightExp   = 2.6  // >1 = darker early
 		lightMax   = 0.9  // brightness ceiling

@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"time"
 )
 
 type RGB struct {
@@ -39,8 +40,10 @@ type Result struct {
 }
 
 func main() {
-	const width, height = 2048, 2048
-	numWorkers := 50
+	startTime := time.Now()
+
+	const width, height = 1000, 1000
+	numWorkers := 64
 
 	jobs := make(chan Job, 1000)
 	results := make(chan Result, 1000)
@@ -74,16 +77,33 @@ func main() {
 	processed := 0
 	total := width * height
 
+	fmt.Printf("Processing %d pixels with %d workers...\n", total, numWorkers)
+
 	for result := range results {
 		pixelData[result.x][result.y] = result.rgb
-
 		processed++
 
-		if processed%10_000 == 0 {
-			fmt.Printf("Processed %d/%d pixels (%.1f%%)\n",
-				processed, total, float64(processed)/float64(total)*100)
+		if processed%5_000 == 0 {
+			elapsed := time.Since(startTime)
+			progress := float64(processed) / float64(total)
+
+			if progress > 0 {
+				totalEstimated := time.Duration(float64(elapsed) / progress)
+				remaining := totalEstimated - elapsed
+
+				fmt.Printf("Processed %d/%d pixels (%.1f%%) - Elapsed: %v - ETA: %v\n",
+					processed, total, progress*100,
+					elapsed.Round(time.Second),
+					remaining.Round(time.Second))
+			}
 		}
 	}
+
+	processingTime := time.Since(startTime)
+	fmt.Printf("Processing complete! Took: %v\n", processingTime.Round(time.Millisecond))
+
+	fmt.Println("Creating image...")
+	imageStartTime := time.Now()
 
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 
@@ -99,6 +119,12 @@ func main() {
 		}
 	}
 
+	imageCreationTime := time.Since(imageStartTime)
+	fmt.Printf("Image creation took: %v\n", imageCreationTime.Round(time.Millisecond))
+
+	fmt.Println("Saving image...")
+	saveStartTime := time.Now()
+
 	file, err := os.Create("C:/Users/jazza/Downloads/wplace/output.png")
 	if err != nil {
 		panic(err)
@@ -109,7 +135,13 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println("Image saved successfully!")
+	saveTime := time.Since(saveStartTime)
+	totalTime := time.Since(startTime)
+
+	fmt.Printf("Image saved successfully!\n")
+	fmt.Printf("Save took: %v\n", saveTime.Round(time.Millisecond))
+	fmt.Printf("Total time: %v\n", totalTime.Round(time.Millisecond))
+	fmt.Printf("Average: %.2f pixels/second\n", float64(total)/totalTime.Seconds())
 }
 
 func worker(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup) {

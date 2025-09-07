@@ -15,20 +15,20 @@ import (
 )
 
 type RGB struct {
-	R uint8 `json:"r"`
-	G uint8 `json:"g"`
-	B uint8 `json:"b"`
+	R uint8
+	G uint8
+	B uint8
 }
 
 type HSL struct {
-	H float64 `json:"h"`
-	S float64 `json:"s"`
-	L float64 `json:"l"`
+	H float64
+	S float64
+	L float64
 }
 
 type ProcessOpts struct {
-	IncludeTransparency bool `json:"includeTransparency"`
-	IncludeBoring       bool `json:"includeBoring"`
+	IncludeTransparency bool
+	IncludeBoring       bool
 }
 
 type Job struct {
@@ -40,12 +40,13 @@ type Result struct {
 	rgb  RGB
 }
 
-func preCheckExistingFiles(width int) map[string]bool {
+const wplacePath string = "C:/Users/jazza/Downloads/wplace"
+
+func preCheckExistingFiles(basepath string, width int) map[string]bool {
 	existing := make(map[string]bool)
-	basePath := "C:/Users/jazza/Downloads/wplace/tiles-30/tiles-30"
 
 	for x := range width {
-		dirPath := fmt.Sprintf("%s/%d", basePath, x)
+		dirPath := fmt.Sprintf("%s/%d", basepath, x)
 		if entries, err := os.ReadDir(dirPath); err == nil {
 			for _, entry := range entries {
 				if strings.HasSuffix(entry.Name(), ".png") {
@@ -59,20 +60,33 @@ func preCheckExistingFiles(width int) map[string]bool {
 }
 
 func main() {
+	folderNumber := 30
+	width, height := 2048, 2048
+	numWorkers := 32
+
+	runProcess(folderNumber, "count", width, height, numWorkers, ProcessOpts{})
+
+	runProcess(folderNumber, "average", width, height, numWorkers, ProcessOpts{IncludeTransparency: true})
+	runProcess(folderNumber, "average", width, height, numWorkers, ProcessOpts{IncludeTransparency: false})
+
+	runProcess(folderNumber, "mode", width, height, numWorkers, ProcessOpts{IncludeBoring: true})
+	runProcess(folderNumber, "mode", width, height, numWorkers, ProcessOpts{IncludeBoring: false})
+}
+
+func runProcess(folderNumber int, processor string, width, height, numWorkers int, opts ProcessOpts) {
 	startTime := time.Now()
 
-	const width, height = 2048, 2048
-	numWorkers := 64
+	basepath := fmt.Sprintf("%s/tiles-%d/tiles-%d", wplacePath, folderNumber, folderNumber)
 
 	jobs := make(chan Job, 1000)
 	results := make(chan Result, 1000)
-	existingFiles := preCheckExistingFiles(width)
+	existingFiles := preCheckExistingFiles(basepath, width)
 
 	var wg sync.WaitGroup
 
 	for range numWorkers {
 		wg.Add(1)
-		go worker(jobs, results, &wg, existingFiles)
+		go worker(jobs, results, &wg, processor, basepath, existingFiles, opts)
 	}
 
 	go func() {
@@ -143,10 +157,20 @@ func main() {
 	imageCreationTime := time.Since(imageStartTime)
 	fmt.Printf("Image creation took: %v\n", imageCreationTime.Round(time.Millisecond))
 
-	fmt.Println("Saving image...")
+	suffix := ""
+	if opts.IncludeTransparency {
+		suffix += "-t"
+	}
+	if opts.IncludeBoring {
+		suffix += "-b"
+	}
+
+	outputPath := fmt.Sprintf("%s/output-%s-%d%s.png", wplacePath, processor, folderNumber, suffix)
+
+	fmt.Fprintf(os.Stderr, "Saving image %s to disk...", outputPath)
 	saveStartTime := time.Now()
 
-	file, err := os.Create("C:/Users/jazza/Downloads/wplace/output.png")
+	file, err := os.Create(outputPath)
 	if err != nil {
 		panic(err)
 	}
@@ -165,17 +189,17 @@ func main() {
 	fmt.Printf("Average: %.2f pixels/second\n", float64(total)/totalTime.Seconds())
 }
 
-func worker(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup, existingFiles map[string]bool) {
+func worker(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup, processor string, basepath string, existingFiles map[string]bool, opts ProcessOpts) {
 	defer wg.Done()
 	for job := range jobs {
-		filepath := fmt.Sprintf("C:/Users/jazza/Downloads/wplace/tiles-30/tiles-30/%d/%d.png", job.x, job.y)
+		filepath := fmt.Sprintf("%s/%d/%d.png", basepath, job.x, job.y)
 
 		if !existingFiles[filepath] {
 			results <- Result{x: job.x, y: job.y, rgb: RGB{0, 0, 0}}
 			continue
 		}
 
-		rgb, err := processPath("count", filepath, ProcessOpts{})
+		rgb, err := processPath(processor, filepath, opts)
 		if err != nil {
 			rgb = RGB{R: 0, G: 0, B: 0}
 		}
@@ -185,7 +209,6 @@ func worker(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup, existing
 }
 
 func processPath(function string, filepath string, opts ProcessOpts) (RGB, error) {
-
 	var result RGB
 	var err error
 

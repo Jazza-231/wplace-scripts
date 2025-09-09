@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"image"
+	"image/draw"
 	"image/png"
 	"math"
 	"os"
@@ -252,14 +253,10 @@ func imageFromFile(filepath string) (*image.RGBA, error) {
 	switch typedImg := img.(type) {
 	case *image.RGBA:
 		return typedImg, nil
+
 	default:
-		// Convert to RGBA first
 		rgba := image.NewRGBA(bounds)
-		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-			for x := bounds.Min.X; x < bounds.Max.X; x++ {
-				rgba.Set(x, y, img.At(x, y))
-			}
-		}
+		draw.Draw(rgba, bounds, img, bounds.Min, draw.Src)
 		return rgba, nil
 	}
 }

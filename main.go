@@ -84,14 +84,19 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 
 	for range numWorkers {
 		wg.Add(1)
-		go worker(jobs, results, &wg, processor, basepath, existingFiles, opts)
+		go worker(jobs, results, &wg, processor, basepath, opts)
 	}
 
 	go func() {
 		defer close(jobs)
 		for x := range width {
 			for y := range height {
-				jobs <- Job{x: x, y: y}
+				filepath := fmt.Sprintf("%s/%d/%d.png", basepath, x, y)
+				if existingFiles[filepath] {
+					jobs <- Job{x: x, y: y}
+				} else {
+					results <- Result{x: x, y: y, rgb: RGB{0, 0, 0}}
+				}
 			}
 		}
 	}()
@@ -190,15 +195,10 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 	fmt.Printf("Average: %.2f pixels/second\n", float64(total)/totalTime.Seconds())
 }
 
-func worker(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup, processor string, basepath string, existingFiles map[string]bool, opts ProcessOpts) {
+func worker(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup, processor string, basepath string, opts ProcessOpts) {
 	defer wg.Done()
 	for job := range jobs {
 		filepath := fmt.Sprintf("%s/%d/%d.png", basepath, job.x, job.y)
-
-		if !existingFiles[filepath] {
-			results <- Result{x: job.x, y: job.y, rgb: RGB{0, 0, 0}}
-			continue
-		}
 
 		rgb, err := processPath(processor, filepath, opts)
 		if err != nil {

@@ -1,4 +1,3 @@
-// ./image-processor average "C:\Users\jazza\Downloads\wplace\_extract-4_1757064660338\tiles-4\618\719.png" "{}"
 package main
 
 import (

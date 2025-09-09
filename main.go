@@ -444,7 +444,7 @@ func modeImageFromFile(filepath string, opts ProcessOpts) (RGB, error) {
 }
 
 func modeRGBA(pixels []uint8, width, height int, opts ProcessOpts) (RGB, error) {
-	colourCounts := make(map[RGB]int)
+	counts := make(map[uint32]int, 64)
 	pixelCount := width * height
 
 	for pixel := range pixelCount {
@@ -458,7 +458,7 @@ func modeRGBA(pixels []uint8, width, height int, opts ProcessOpts) (RGB, error) 
 			continue
 		}
 
-		colour := RGB{R: r, G: g, B: b}
+		packed := uint32(r)<<16 | uint32(g)<<8 | uint32(b)
 
 		if !opts.IncludeBoring {
 			if r == 0 && g == 0 && b == 0 {
@@ -469,15 +469,16 @@ func modeRGBA(pixels []uint8, width, height int, opts ProcessOpts) (RGB, error) 
 			}
 		}
 
-		colourCounts[colour]++
+		counts[packed]++
 	}
 
 	var maxCount int
 	var mostFreqColour RGB
 
-	for colour, count := range colourCounts {
+	for packed, count := range counts {
 		if count > maxCount {
 			maxCount = count
+			colour := RGB{R: byte(packed >> 16), G: byte(packed >> 8), B: byte(packed)}
 			mostFreqColour = colour
 		}
 	}

@@ -4,11 +4,9 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"image/png"
 	"math"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -278,62 +276,34 @@ func averageImageFromFile(filepath string, opts ProcessOpts) (RGB, error) {
 }
 
 func averageRGBA(pixels []uint8, width, height int, opts ProcessOpts) (RGB, error) {
-	numWorkers := runtime.NumCPU()
-	pixelCount := width * height
-	chunkSize := pixelCount / numWorkers
-
-	type result struct{ r, g, b, count float64 }
-	results := make(chan result, numWorkers)
-
-	for i := range numWorkers {
-		go func(startPixel, endPixel int) {
-			var r, g, b, count float64
-
-			for pixel := startPixel; pixel < endPixel; pixel++ {
-				idx := pixel * 4
-				alpha := float64(pixels[idx+3]) / 255.0
-
-				// Skip fully transparent pixels unless we want to include them
-				if alpha <= 0 && !opts.IncludeTransparency {
-					continue
-				}
-
-				if opts.IncludeTransparency {
-					// Include all pixels equally (even transparent ones)
-					r += float64(pixels[idx])
-					g += float64(pixels[idx+1])
-					b += float64(pixels[idx+2])
-					count += 1.0
-				} else {
-					// Weight by alpha (standard alpha blending)
-					r += float64(pixels[idx]) * alpha
-					g += float64(pixels[idx+1]) * alpha
-					b += float64(pixels[idx+2]) * alpha
-					count += alpha
-				}
-			}
-			results <- result{r, g, b, count}
-		}(i*chunkSize, min((i+1)*chunkSize, pixelCount))
+	if width <= 0 || height <= 0 || len(pixels) < width*height*4 {
+		return RGB{}, fmt.Errorf("invalid input")
 	}
 
-	// Collect results
-	var totalR, totalG, totalB, totalCount float64
-	for range numWorkers {
-		res := <-results
-		totalR += res.r
-		totalG += res.g
-		totalB += res.b
-		totalCount += res.count
+	var r, g, b, count uint64
+	for i := 0; i < len(pixels); i += 4 {
+		// Since my images never contain semi-transparent pixels (alpha is always 0 or 255)
+		// I decided for simplicity and speed (up to 13% from small test?), I can just not handle partial transparency
+		// This makes the function less general; images with semi-transparent pixels will not work as expected
+		alpha := pixels[i+3]
+		if alpha == 0 && !opts.IncludeTransparency {
+			continue
+		}
+
+		r += uint64(pixels[i])
+		g += uint64(pixels[i+1])
+		b += uint64(pixels[i+2])
+		count++
 	}
 
-	if totalCount == 0 {
+	if count == 0 {
 		return RGB{0, 0, 0}, nil
 	}
 
 	return RGB{
-		R: uint8(totalR / totalCount),
-		G: uint8(totalG / totalCount),
-		B: uint8(totalB / totalCount),
+		R: uint8(r / count),
+		G: uint8(g / count),
+		B: uint8(b / count),
 	}, nil
 }
 

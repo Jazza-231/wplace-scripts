@@ -142,15 +142,18 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 
-	for x := range width {
-		for y := range height {
+	// I think doing it without img.Set is faster. Also I fucking love go
+	pixels := img.Pix
+	stride := img.Stride
+	for y := range height {
+		off := y * stride
+		for x := range width {
 			rgb := pixelData[x][y]
-			img.Set(x, y, color.RGBA{
-				R: rgb.R,
-				G: rgb.G,
-				B: rgb.B,
-				A: 255,
-			})
+			pixels[off+0] = rgb.R
+			pixels[off+1] = rgb.G
+			pixels[off+2] = rgb.B
+			pixels[off+3] = 255
+			off += 4
 		}
 	}
 

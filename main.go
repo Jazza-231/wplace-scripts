@@ -64,8 +64,8 @@ func main() {
 	width, height := 2048, 2048
 	numWorkers := 32
 
-	folder := flag.Int("folder", 1, "The folder number to process")
-	workers := flag.Int("workers", 64, "The number of workers to use")
+	folder := flag.Int("f", 1, "The folder number to process")
+	workers := flag.Int("w", 64, "The number of workers to use")
 	flag.Parse()
 
 	folderNumber = *folder
@@ -129,13 +129,21 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 	processed := 0
 	total := width * height
 
-	fmt.Printf("Processing %d pixels in %s with %d workers doing %s...\n", total, basepath, numWorkers, processor)
+	suffix := ""
+	if opts.IncludeTransparency {
+		suffix += "-t"
+	}
+	if opts.IncludeBoring {
+		suffix += "-b"
+	}
+
+	fmt.Printf("Processing %d pixels in %s with %d workers doing %s%s...\n", total, basepath, numWorkers, processor, suffix)
 
 	for result := range results {
 		pixelData[result.x][result.y] = result.rgb
 		processed++
 
-		if processed%5_000 == 0 {
+		if processed%20_000 == 0 {
 			elapsed := time.Since(startTime)
 			progress := float64(processed) / float64(total)
 
@@ -176,14 +184,6 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 
 	imageCreationTime := time.Since(imageStartTime)
 	fmt.Printf("Image creation took: %v\n", imageCreationTime.Round(time.Millisecond))
-
-	suffix := ""
-	if opts.IncludeTransparency {
-		suffix += "-t"
-	}
-	if opts.IncludeBoring {
-		suffix += "-b"
-	}
 
 	outputPath := fmt.Sprintf("%s/data/%d-%s%s.png", wplacePath, folderNumber, processor, suffix)
 
@@ -347,7 +347,7 @@ func countRGBA(pixels []uint8, width, height int) (RGB, error) {
 
 	const (
 		fracAtHalf = 0.01 // want value=0.5 at this total/pixel fraction
-		hueExp     = 1.1  // >1 = linger near red longer
+		hueExp     = 0.8  // >1 = linger near red longer
 		lightExp   = 1.6  // >1 = darker early
 		lightMax   = 0.9  // brightness ceiling
 	)

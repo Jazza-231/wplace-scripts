@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
 	"image"
 	"image/draw"
@@ -58,9 +60,16 @@ func preCheckExistingFiles(basepath string, width int) map[string]bool {
 }
 
 func main() {
-	folderNumber := 30
+	folderNumber := 1
 	width, height := 2048, 2048
 	numWorkers := 32
+
+	folder := flag.Int("folder", 1, "The folder number to process")
+	workers := flag.Int("workers", 64, "The number of workers to use")
+	flag.Parse()
+
+	folderNumber = *folder
+	numWorkers = *workers
 
 	runProcess(folderNumber, "count", width, height, numWorkers, ProcessOpts{})
 
@@ -75,6 +84,11 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 	startTime := time.Now()
 
 	basepath := fmt.Sprintf("%s/tiles-%d/tiles-%d", wplacePath, folderNumber, folderNumber)
+
+	if !exists(basepath) {
+		fmt.Printf("Folder \"%s\" does not exist!\n", basepath)
+		os.Exit(1)
+	}
 
 	jobs := make(chan Job, 1000)
 	results := make(chan Result, 1000)
@@ -115,7 +129,7 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 	processed := 0
 	total := width * height
 
-	fmt.Printf("Processing %d pixels with %d workers...\n", total, numWorkers)
+	fmt.Printf("Processing %d pixels in %s with %d workers doing %s...\n", total, basepath, numWorkers, processor)
 
 	for result := range results {
 		pixelData[result.x][result.y] = result.rgb
@@ -171,7 +185,7 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 		suffix += "-b"
 	}
 
-	outputPath := fmt.Sprintf("%s/output-%s-%d%s.png", wplacePath, processor, folderNumber, suffix)
+	outputPath := fmt.Sprintf("%s/data/%d-%s%s.png", wplacePath, folderNumber, processor, suffix)
 
 	fmt.Fprintf(os.Stderr, "Saving image %s to disk...", outputPath)
 	saveStartTime := time.Now()
@@ -193,6 +207,11 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 	fmt.Printf("Save took: %v\n", saveTime.Round(time.Millisecond))
 	fmt.Printf("Total time: %v\n", totalTime.Round(time.Millisecond))
 	fmt.Printf("Average: %.2f pixels/second\n", float64(total)/totalTime.Seconds())
+}
+
+func exists(basepath string) bool {
+	_, err := os.Stat(basepath)
+	return !errors.Is(err, os.ErrNotExist)
 }
 
 func worker(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup, processor string, basepath string, opts ProcessOpts) {

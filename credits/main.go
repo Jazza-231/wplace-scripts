@@ -111,8 +111,8 @@ func main() {
 	const (
 		baseURL     = "https://backend.wplace.live/s0/pixel"
 		outPath     = `C:\Users\jazza\Downloads\wplace\credits.json`
-		maxRetries  = 10 // total attempts = maxRetries+1
-		logEvery    = 5 * time.Second
+		maxRetries  = 100 // total attempts = maxRetries+1
+		logEvery    = 10 * time.Second
 		userAgent   = "Mozilla/5.0 (compatible; wplace-prober/1.1)"
 		cfClearance = ""
 		jCookie     = ""
@@ -393,8 +393,7 @@ func fetchOne(client *http.Client, baseURL, userAgent, cfClearance, jCookie stri
 }
 
 func backoff(attempt int) {
-	// 150ms, 300ms, 450ms, ... keep it gentle
-	base := 150 * time.Millisecond
+	base := 1000 * time.Millisecond
 	time.Sleep(time.Duration(attempt+1) * base)
 }
 

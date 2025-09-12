@@ -40,7 +40,7 @@ type Result struct {
 	rgb  RGB
 }
 
-const wplacePath string = "C:/Users/jazza/Downloads/wplace"
+var wplacePath string = "C:/Users/jazza/Downloads/wplace"
 
 func preCheckExistingFiles(basepath string, width int) map[string]bool {
 	existing := make(map[string]bool)
@@ -66,10 +66,12 @@ func main() {
 
 	folder := flag.Int("f", 1, "The folder number to process")
 	workers := flag.Int("w", 64, "The number of workers to use")
+	wplace := flag.String("p", wplacePath, "The path to the wplace folder, namely the folder containing the tiles-x folder")
 	flag.Parse()
 
 	folderNumber = *folder
 	numWorkers = *workers
+	wplacePath = *wplace
 
 	runProcess(folderNumber, "count", width, height, numWorkers, ProcessOpts{})
 

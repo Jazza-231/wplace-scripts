@@ -187,7 +187,12 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 	imageCreationTime := time.Since(imageStartTime)
 	fmt.Printf("Image creation took: %v\n", imageCreationTime.Round(time.Millisecond))
 
-	outputPath := fmt.Sprintf("%s/data/%d-%s%s.png", wplacePath, folderNumber, processor, suffix)
+	outputFolder := fmt.Sprintf("%s/data", wplacePath)
+	if !exists(outputFolder) {
+		fmt.Printf("Creating output folder %s...\n", outputFolder)
+		os.Mkdir(outputFolder, os.ModePerm)
+	}
+	outputPath := fmt.Sprintf("%s/%d-%s%s.png", outputFolder, folderNumber, processor, suffix)
 
 	fmt.Fprintf(os.Stderr, "Saving image %s to disk...", outputPath)
 	saveStartTime := time.Now()

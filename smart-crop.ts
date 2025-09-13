@@ -363,7 +363,8 @@ async function listImages(targetPath: string) {
 		rl.close();
 	} catch (err) {
 		rl.close();
-		console.error("err:", err.message || err);
+		if (err instanceof Error) console.error("err:", err.message);
+		else console.error("err:", err);
 		process.exit(1);
 	}
 })();

@@ -108,7 +108,8 @@ async function fetchWithRetry(url: string, maxRetries = 10): Promise<Response> {
 
 			return proxyRequest; // Explicitly return the response
 		} catch (error) {
-			console.error(`Attempt ${attempt} failed:`, error.message);
+			if (error instanceof Error) console.error(`Attempt ${attempt} failed:`, error.message);
+			else console.error(`Attempt ${attempt} failed:`, error);
 
 			if (attempt === maxRetries) {
 				throw error; // Final attempt failed

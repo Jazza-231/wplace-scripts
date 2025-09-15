@@ -62,30 +62,38 @@ func preCheckExistingFiles(basepath string, width int) map[string]bool {
 func main() {
 	folderNumber := 1
 	width, height := 2048, 2048
-	numWorkers := 32
+	numWorkers := 16
+	singleFolder := false
 
-	folder := flag.Int("f", 1, "The folder number to process")
-	workers := flag.Int("w", 64, "The number of workers to use")
+	folder := flag.Int("f", folderNumber, "The folder number to process")
+	workers := flag.Int("w", numWorkers, "The number of workers to use")
 	wplace := flag.String("p", wplacePath, "The path to the wplace folder, namely the folder containing the tiles-x folder")
+	single := flag.Bool("s", singleFolder, "Whether the archive is tiles-x.7z/tiles-x or just tiles-x.7z")
 	flag.Parse()
 
 	folderNumber = *folder
 	numWorkers = *workers
 	wplacePath = *wplace
+	singleFolder = *single
 
-	runProcess(folderNumber, "count", width, height, numWorkers, ProcessOpts{})
+	runProcess(folderNumber, "count", width, height, numWorkers, singleFolder, ProcessOpts{})
 
-	runProcess(folderNumber, "average", width, height, numWorkers, ProcessOpts{IncludeTransparency: true})
-	runProcess(folderNumber, "average", width, height, numWorkers, ProcessOpts{IncludeTransparency: false})
+	runProcess(folderNumber, "average", width, height, numWorkers, singleFolder, ProcessOpts{IncludeTransparency: true})
+	runProcess(folderNumber, "average", width, height, numWorkers, singleFolder, ProcessOpts{IncludeTransparency: false})
 
-	runProcess(folderNumber, "mode", width, height, numWorkers, ProcessOpts{IncludeBoring: true})
-	runProcess(folderNumber, "mode", width, height, numWorkers, ProcessOpts{IncludeBoring: false})
+	runProcess(folderNumber, "mode", width, height, numWorkers, singleFolder, ProcessOpts{IncludeBoring: true})
+	runProcess(folderNumber, "mode", width, height, numWorkers, singleFolder, ProcessOpts{IncludeBoring: false})
 }
 
-func runProcess(folderNumber int, processor string, width, height, numWorkers int, opts ProcessOpts) {
+func runProcess(folderNumber int, processor string, width, height, numWorkers int, singleFolder bool, opts ProcessOpts) {
 	startTime := time.Now()
+	basepath := ""
 
-	basepath := fmt.Sprintf("%s/tiles-%d/tiles-%d", wplacePath, folderNumber, folderNumber)
+	if singleFolder {
+		basepath = fmt.Sprintf("%s/tiles-%d", wplacePath, folderNumber)
+	} else {
+		basepath = fmt.Sprintf("%s/tiles-%d/tiles-%d", wplacePath, folderNumber, folderNumber)
+	}
 
 	if !exists(basepath) {
 		fmt.Printf("Folder \"%s\" does not exist!\n", basepath)

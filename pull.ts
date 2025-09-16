@@ -7,7 +7,7 @@ import { pipeline } from "stream/promises";
 import { Readable } from "stream";
 import { configDotenv } from "dotenv";
 
-configDotenv();
+configDotenv({ quiet: true });
 
 /* -------------------- GLOBALS -------------------- */
 // This WAS a real hardcoded URL, but it's now in my .env, and it has been re-rolled, so git history won't leak a working URL

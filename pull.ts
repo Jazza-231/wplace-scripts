@@ -1,12 +1,3 @@
-// pull.js
-// Flow:
-/*
-1. Pull proxy list from Download Link
-2. Create pool of proxies
-3. Create pool of URLs
-4. Go through and download each URL through a rotated proxy
- */
-
 /* -------------------- IMPORTS -------------------- */
 import { request, ProxyAgent } from "undici";
 import fs from "fs";

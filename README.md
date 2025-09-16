@@ -24,7 +24,7 @@ Some AI used. If it looks like AI, chances are I wrote it. If it looks like a go
 
 Pulls the tiles from WPlace. Uses a shit ton of proxies, with some "smart" logic to use concurrency and not get rate limited.
 
-### extract.ts
+### ./extract/main.go
 
 Just extracts a series of tiles (given as x, y coords) from a series of 7z archives. I use it to avoid destroying the whole burrito just for a few grains of rice (get some files without extracting the whole thing).
 

@@ -160,8 +160,8 @@ func dilateMask(w, h int, mask []byte, r int) []byte {
 	}
 	out := make([]byte, len(mask))
 	idx := func(x, y int) int { return y*w + x }
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			on := byte(0)
 			for dy := -r; dy <= r && on == 0; dy++ {
 				yy := y + dy
@@ -194,8 +194,8 @@ func findComponents8(w, h int, mask []byte) []component {
 
 	var comps []component
 
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			p := idx(x, y)
 			if mask[p] == 0 || visited[p] != 0 {
 				continue
@@ -372,7 +372,7 @@ func strictGridGuardNRGBA(img *image.NRGBA) bool {
 
 	var gH, gV int
 
-	for y := 0; y < h; y++ {
+	for y := range h {
 		row := y * img.Stride
 		run := 1
 		for x := 1; x < w; x++ {
@@ -400,7 +400,7 @@ func strictGridGuardNRGBA(img *image.NRGBA) bool {
 		}
 	}
 
-	for x := 0; x < w; x++ {
+	for x := range w {
 		run := 1
 		for y := 1; y < h; y++ {
 			i0 := (y-1)*img.Stride + 4*x
@@ -435,14 +435,14 @@ func nearestResize(src *image.NRGBA, tw, th int) *image.NRGBA {
 
 	sw := src.Bounds().Dx()
 	sh := src.Bounds().Dy()
-	for y := 0; y < th; y++ {
+	for y := range th {
 		sy := int(float64(y) * float64(sh) / float64(th))
 		if sy >= sh {
 			sy = sh - 1
 		}
 		srcRow := sy * src.Stride
 		dstRow := y * dst.Stride
-		for x := 0; x < tw; x++ {
+		for x := range tw {
 			sx := int(float64(x) * float64(sw) / float64(tw))
 			if sx >= sw {
 				sx = sw - 1
@@ -468,9 +468,9 @@ func savePNG(path string, img image.Image) error {
 func countUniqueColorsNRGBA(img *image.NRGBA, minNeeded int) (int, bool) {
 	w, h := img.Bounds().Dx(), img.Bounds().Dy()
 	seen := make(map[uint32]struct{}, minNeeded)
-	for y := 0; y < h; y++ {
+	for y := range h {
 		row := y * img.Stride
-		for x := 0; x < w; x++ {
+		for x := range w {
 			i := row + 4*x
 			key := uint32(img.Pix[i])<<24 | uint32(img.Pix[i+1])<<16 | uint32(img.Pix[i+2])<<8 | uint32(img.Pix[i+3])
 			if _, ok := seen[key]; !ok {
@@ -622,23 +622,18 @@ func runOnceOnPath(p string) {
 		return
 	}
 
-	workerCount := runtime.NumCPU()
-	if workerCount > len(imgs) {
-		workerCount = len(imgs)
-	}
+	workerCount := min(runtime.NumCPU(), len(imgs))
 	wg := sync.WaitGroup{}
 	jobs := make(chan string, workerCount*2)
 
-	for i := 0; i < workerCount; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range workerCount {
+		wg.Go(func() {
 			for p := range jobs {
 				if err := processImage(p); err != nil {
 					fmt.Printf("err %s: %v\n", filepath.Base(p), err)
 				}
 			}
-		}()
+		})
 	}
 
 	for _, p := range imgs {

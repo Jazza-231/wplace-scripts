@@ -4,7 +4,7 @@ import fs from "fs";
 import fsp from "fs/promises";
 
 const baseDir = import.meta.dirname;
-const runPullPath = path.join(baseDir, "run-pull.ts"); // unused here, kept in case you wire it back
+const runPullPath = path.join(baseDir, "run-pull.ts");
 const wPlacePath = "C:/Users/jazza/Downloads/wplace";
 const sevenZipPath = "C:/Program Files/7-Zip/7z.exe";
 

@@ -54,7 +54,6 @@ const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 
 /* -------------------- TELEMETRY -------------------- */
-
 const perProxy = new Map<string, { ok: number; fourxx: number; fivexx: number }>();
 
 function bump(proxy: string, code: number) {
@@ -70,19 +69,6 @@ const statusCounts: Record<number, number> = {};
 let errorCount = 0;
 
 setInterval(() => {
-	const active = [...perProxy.entries()].filter(([, s]) => s.ok + s.fourxx + s.fivexx > 0).length;
-
-	// console.log(
-	// 	"latency",
-	// 	latencyBuckets,
-	// 	"status",
-	// 	statusCounts,
-	// 	"errors",
-	// 	errorCount,
-	// 	"proxies",
-	// 	active,
-	// );
-
 	for (const k of Object.keys(latencyBuckets)) delete latencyBuckets[k];
 	for (const k of Object.keys(statusCounts)) delete statusCounts[+k];
 	errorCount = 0;
@@ -91,38 +77,34 @@ setInterval(() => {
 }, 5000).unref();
 
 /* -------------------- GET PROXIES -------------------- */
-
 async function fetchWithRetry(url: string, maxRetries = 10): Promise<Response> {
 	for (let attempt = 1; attempt <= maxRetries; attempt++) {
 		try {
 			console.log(`Fetching proxies (attempt ${attempt}/${maxRetries})...`);
 
 			const proxyRequest = await fetch(url, {
-				// Use signal for timeout (standard fetch API)
-				signal: AbortSignal.timeout(30000), // 30 seconds total timeout
+				signal: AbortSignal.timeout(30 * SECOND),
 			});
 
 			if (!proxyRequest.ok) {
 				throw new Error(`HTTP ${proxyRequest.status}: ${proxyRequest.statusText}`);
 			}
 
-			return proxyRequest; // Explicitly return the response
+			return proxyRequest;
 		} catch (error) {
 			if (error instanceof Error) console.error(`Attempt ${attempt} failed:`, error.message);
 			else console.error(`Attempt ${attempt} failed:`, error);
 
 			if (attempt === maxRetries) {
-				throw error; // Final attempt failed
+				throw error;
 			}
 
-			// Wait before retrying (exponential backoff)
 			const delay = Math.min(1000 * Math.pow(2, attempt - 1), 30 * SECOND);
 			console.log(`Retrying in ${delay}ms...`);
 			await new Promise((resolve) => setTimeout(resolve, delay));
 		}
 	}
 
-	// This should never be reached due to the throw above, but TypeScript needs it
 	throw new Error("All retry attempts failed");
 }
 
@@ -180,11 +162,6 @@ function getAgent(proxyURI: string) {
 }
 
 /* -------------------- HELPERS -------------------- */
-function getRandomProxy() {
-	const randomIndex = Math.floor(Math.random() * numberOfProxies);
-	return proxies[randomIndex];
-}
-
 let proxyIdx = 0;
 function getNextProxy() {
 	return proxies[proxyIdx++ % proxies.length];
@@ -231,7 +208,7 @@ function formattedTime(ms: number) {
 
 	if (ms < MINUTE) {
 		const s = Math.floor(ms / SECOND);
-		const ds = Math.floor((ms % SECOND) / 100); // 10ths of a second
+		const ds = Math.floor((ms % SECOND) / 100);
 		return ds ? `${s}.${ds}s` : `${s}s`;
 	}
 
@@ -334,8 +311,8 @@ function* generateTaskCoords() {
 }
 
 const taskGenerator = generateTaskCoords();
-const activeTasks = new Map<string, Task>(); // Only store active/retry tasks
-const maxActiveTasks = concurrency * 3; // Buffer for retries
+const activeTasks = new Map<string, Task>();
+const maxActiveTasks = concurrency * 3;
 const completedStats = { done: 0, failed: 0, files: 0 };
 let generatorExhausted = false;
 
@@ -471,7 +448,6 @@ async function runAll() {
 		// If no active tasks and generator is done, we're finished
 		if (activeTasks.size === 0 && generatorExhausted) break;
 
-		// Schedule pending tasks
 		for (const task of activeTasks.values()) {
 			if (task.status === "pending" && Date.now() >= task.nextEarliestAt) {
 				scheduleTask(task);

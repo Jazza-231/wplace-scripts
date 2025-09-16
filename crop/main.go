@@ -6,10 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"image/color"
 	"image/draw"
-	"image/gif"
-	"image/jpeg"
 	"image/png"
 	"math"
 	"os"
@@ -19,12 +16,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-
-	_ "golang.org/x/image/bmp"  // register BMP decoder
-	_ "golang.org/x/image/webp" // register WebP decoder
 )
 
-// ===== Config (kept close to your JS constants) =====
 const (
 	OUTPUT_DIR         = `C:\Users\jazza\Downloads\wplace\cropped`
 	ALPHA_THRESHOLD    = 16  // >= alpha counts as solid
@@ -37,14 +30,13 @@ const (
 	MAX_POW2_SCALE     = 8   // 1, 2, 4, 8 only
 	STRICT_GRID_GUARD  = false
 
-	// New: minimum unique colours required to save an output.
+	// min unique colours required to save
 	// Set to 0 to disable the check.
 	MIN_UNIQUE_COLORS = 3
 )
 
-var globalSeq uint64 // thread-safe global output sequence
+var globalSeq uint64
 
-// component is the same struct you had
 type component struct {
 	minX, minY int
 	maxX, maxY int
@@ -54,8 +46,6 @@ type component struct {
 var allowedExt = map[string]bool{
 	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".bmp": true,
 }
-
-// ===== tiny helpers =====
 
 func isImagePath(p string) bool {
 	ext := strings.ToLower(filepath.Ext(p))
@@ -94,7 +84,7 @@ func gcd(a, b int) int {
 	return a
 }
 
-// choose a power of two in [1, MAX_POW2_SCALE] that makes width*s closest to TARGET_WIDTH
+// What power is closest to the target
 func choosePow2Scale(w int) int {
 	width := int(math.Max(1, float64(w)))
 	best := 1
@@ -116,10 +106,6 @@ func intAbs(x int) int {
 	return x
 }
 
-// ===== image loading and RGBA normalization =====
-
-// We normalize any decoded image into *image.NRGBA so pixel math is simple.
-// If the source has no alpha, we treat it as fully opaque.
 func loadAsNRGBA(path string) (*image.NRGBA, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -144,8 +130,6 @@ func loadAsNRGBA(path string) (*image.NRGBA, error) {
 	return dst, nil
 }
 
-// ===== mask creation, dilation, components, merging, tighten =====
-
 func makeMaskNRGBA(img *image.NRGBA) (w, h int, mask []byte, solidCount int) {
 	b := img.Bounds()
 	w, h = b.Dx(), b.Dy()
@@ -168,7 +152,6 @@ func makeMaskNRGBA(img *image.NRGBA) (w, h int, mask []byte, solidCount int) {
 	return
 }
 
-// simple square-radius dilation on a binary mask
 func dilateMask(w, h int, mask []byte, r int) []byte {
 	if r <= 0 {
 		cp := make([]byte, len(mask))
@@ -369,9 +352,6 @@ func tightenOnOriginal(mask []byte, w, h int, box component) (component, bool) {
 	return component{minX: x0, minY: y0, maxX: x1, maxY: y1, count: cnt}, true
 }
 
-// ===== crop, pad, grid-guard, resize, save =====
-
-// cropAndPad copies a rectangle out of src and adds transparent padding on all sides.
 func cropAndPad(src *image.NRGBA, r image.Rectangle, pad int) *image.NRGBA {
 	b := src.Bounds()
 	r = r.Intersect(b)
@@ -384,8 +364,6 @@ func cropAndPad(src *image.NRGBA, r image.Rectangle, pad int) *image.NRGBA {
 	return dst
 }
 
-// strictGridGuard checks horizontal and vertical runs of identical RGBA values.
-// If it finds different grid steps horizontally vs vertically, it flags as off-grid.
 func strictGridGuardNRGBA(img *image.NRGBA) bool {
 	w, h := img.Bounds().Dx(), img.Bounds().Dy()
 	if w <= 1 || h <= 1 {
@@ -452,7 +430,6 @@ func strictGridGuardNRGBA(img *image.NRGBA) bool {
 	return gH > 1 && gV > 1 && gH != gV
 }
 
-// nearestResize scales src to (tw, th) using nearest neighbour.
 func nearestResize(src *image.NRGBA, tw, th int) *image.NRGBA {
 	dst := image.NewNRGBA(image.Rect(0, 0, tw, th))
 
@@ -488,7 +465,6 @@ func savePNG(path string, img image.Image) error {
 	return enc.Encode(f, img)
 }
 
-// New: count unique colours in an NRGBA. If minNeeded > 0, early exit once reached.
 func countUniqueColorsNRGBA(img *image.NRGBA, minNeeded int) (int, bool) {
 	w, h := img.Bounds().Dx(), img.Bounds().Dy()
 	seen := make(map[uint32]struct{}, minNeeded)
@@ -510,8 +486,6 @@ func countUniqueColorsNRGBA(img *image.NRGBA, minNeeded int) (int, bool) {
 	}
 	return len(seen), true
 }
-
-// ===== core per-image pipeline =====
 
 func processImage(path string) error {
 	img, err := loadAsNRGBA(path)
@@ -554,7 +528,6 @@ func processImage(path string) error {
 		return nil
 	}
 
-	// sort by count desc
 	for i := 0; i < len(tight)-1; i++ {
 		maxIdx := i
 		for j := i + 1; j < len(tight); j++ {
@@ -587,7 +560,6 @@ func processImage(path string) error {
 			}
 		}
 
-		// Unique colour filter
 		if MIN_UNIQUE_COLORS > 0 {
 			uc, ok := countUniqueColorsNRGBA(cropped, MIN_UNIQUE_COLORS)
 			if !ok {
@@ -614,8 +586,6 @@ func processImage(path string) error {
 	}
 	return nil
 }
-
-// ===== listing and interactive loop =====
 
 func listImages(targetPath string) ([]string, error) {
 	info, err := os.Stat(targetPath)
@@ -645,7 +615,6 @@ func listImages(targetPath string) ([]string, error) {
 	return nil, errors.New("no images found")
 }
 
-// process a folder (or single file) using the existing worker pool logic
 func runOnceOnPath(p string) {
 	imgs, err := listImages(p)
 	if err != nil || len(imgs) == 0 {
@@ -681,8 +650,6 @@ func runOnceOnPath(p string) {
 	fmt.Printf("done -> %s\n", OUTPUT_DIR)
 }
 
-// New: clear the output folder of image files between auto steps.
-// We keep it simple and fast enough: single pass, delete files that look like images.
 func clearOutputDirImages() int {
 	entries, err := os.ReadDir(OUTPUT_DIR)
 	if err != nil {
@@ -714,7 +681,6 @@ func promptLoop() {
 			return
 		}
 
-		// auto mode
 		if strings.HasPrefix(strings.ToLower(line), "auto ") {
 			raw := strings.TrimSpace(line[5:])
 			raw = strings.TrimSpace(strings.Trim(raw, `"'`))
@@ -737,30 +703,25 @@ func promptLoop() {
 				fmt.Printf("[auto] processing %s\n", curPath)
 				runOnceOnPath(curPath)
 
-				// ask for the next action
 				fmt.Printf("[auto] Press Enter for next (%d), type a new path, or STOP: ", cur+1)
 				next, _ := in.ReadString('\n')
 				next = strings.TrimSpace(strings.Trim(next, `"'`))
 
-				// empty => before moving on, wipe the cropped folder so the next batch is clean
 				if next == "" {
 					n := clearOutputDirImages()
 					fmt.Printf("[auto] cleared %d files from %s\n", n, OUTPUT_DIR)
 					cur++
 					continue
 				}
-				// stop => exit entirely
 				if strings.EqualFold(next, "stop") {
 					fmt.Println("stopping")
 					return
 				}
-				// anything else => switch to normal handling of that input
 				line = next
 				break
 			}
 		}
 
-		// normal path handling
 		if !strings.HasPrefix(strings.ToLower(line), "auto ") {
 			runOnceOnPath(line)
 		}
@@ -768,10 +729,6 @@ func promptLoop() {
 }
 
 func main() {
-	// force registration of common encoders so the linker keeps them
-	_ = jpeg.DefaultQuality
-	_ = gif.DisposalNone
-	_ = color.Alpha{}
 
 	promptLoop()
 }

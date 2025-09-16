@@ -14,10 +14,14 @@ import path from "path";
 import Bottleneck from "bottleneck";
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
+import { configDotenv } from "dotenv";
+
+configDotenv();
 
 /* -------------------- GLOBALS -------------------- */
-const proxyListURL =
-	"https://proxy.webshare.io/api/v2/proxy/list/download/zbgxzbrtvewzcgswesweqdcbtcrmmihxdgtuwxdm/-/any/username/direct/-/?plan_id=11758104";
+// This WAS a real hardcoded URL, but it's now in my .env, and it has been re-rolled, so git history won't leak a working URL
+const proxyListURL = process.env.PROXY_LIST_URL;
+if (!proxyListURL) throw new Error("PROXY_LIST_URL not set");
 const basePath = "C:/Users/jazza/Downloads/wplace/";
 const wPlaceURL = "https://backend.wplace.live/files/s0/tiles/{x}/{y}.png";
 

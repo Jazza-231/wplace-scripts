@@ -17,11 +17,21 @@ const (
 	sevenZipPath = `C:\Program Files\7-Zip\7z.exe`
 	basePath     = `C:\Users\jazza\Downloads\wplace`
 	startIndex   = 1
-	endIndex     = 72
+	endIndex     = 79
+	leftX        = 1000
+	rightX       = 1004
+	topY         = 629
+	bottomY      = 633
 )
 
-var targets = []Target{
-	{X: "1083", Y: "695"},
+var targets []Target
+
+func init() {
+	for x := leftX; x <= rightX; x++ {
+		for y := topY; y <= bottomY; y++ {
+			targets = append(targets, Target{X: fmt.Sprint(x), Y: fmt.Sprint(y)})
+		}
+	}
 }
 
 func main() {

@@ -12,12 +12,12 @@ import (
 
 func main() {
 	basePath := `C:\Users\jazza\Downloads\wplace`
-	x, y := 1083, 695
+	x, y := 1677, 1217
 
 	// Crop rectangle: (left, top, right, bottom)
-	cropRect := image.Rect(162, 564, 637, 831)
+	cropRect := image.Rect(974, 554, 2476, 1555)
 
-	for i := 1; i <= 72; i++ {
+	for i := 1; i <= 84; i++ {
 		fileName := fmt.Sprintf("%d-X%d-Y%d.png", i, x, y)
 		path := filepath.Join(basePath, fileName)
 

@@ -41,7 +41,7 @@ const maxY = args?.maxY ?? 2047;
 
 const totalTasks = (maxX - minX + 1) * (maxY - minY + 1);
 
-const concurrency = 800;
+const concurrency = 900;
 const minTime = 0;
 
 const SECOND = 1000;
@@ -94,7 +94,7 @@ async function fetchWithRetry(url: string, maxRetries = 10): Promise<Response> {
 				throw error;
 			}
 
-			const delay = Math.min(1000 * Math.pow(2, attempt - 1), 30 * SECOND);
+			const delay = Math.min(2000 * Math.pow(2, attempt - 1), 30 * SECOND);
 			console.log(`Retrying in ${delay}ms...`);
 			await new Promise((resolve) => setTimeout(resolve, delay));
 		}

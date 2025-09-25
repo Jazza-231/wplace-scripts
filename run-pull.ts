@@ -6,6 +6,11 @@ const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 
+const WPLACE_PATH = process.env.WPLACE_PATH;
+if (!WPLACE_PATH) {
+	throw new Error("WPLACE_PATH environment variable is not set");
+}
+
 const basePath = import.meta.dirname;
 const pullScript = path.join(basePath, "pull.ts");
 const splits = 12;
@@ -54,6 +59,7 @@ function splitRanges(minX: number, maxX: number, splits: number): Array<[number,
 }
 
 const ranges = splitRanges(minX, maxX, splits);
+let totalFilesMade = 0;
 
 for (let i = 0; i < splits; i++) {
 	const r = ranges[i];
@@ -68,6 +74,7 @@ for (let i = 0; i < splits; i++) {
 	const child = fork(pullScript, args, {
 		execArgv: ["--import", "tsx"],
 		silent: true,
+		env: { ...process.env, WPLACE_PATH },
 	});
 
 	console.log(`Starting child ${i}: X=${splitMinX}-${splitMaxX}`);
@@ -99,6 +106,12 @@ for (let i = 0; i < splits; i++) {
 
 	child.on("exit", (code) => {
 		console.log(`Child ${i} exited with code ${code}`);
+
+		const stats = childStats.get(i);
+		if (stats) {
+			totalFilesMade += stats.files;
+		}
+
 		childStats.delete(i);
 
 		// When all children are done
@@ -116,6 +129,7 @@ for (let i = 0; i < splits; i++) {
 				maxX,
 				minY,
 				maxY,
+				totalFiles: totalFilesMade + "(approximate)",
 			};
 
 			const logFile = path.join(

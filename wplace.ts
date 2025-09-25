@@ -2,18 +2,37 @@ import { spawn, fork } from "child_process";
 import path from "path";
 import fs from "fs";
 import fsp from "fs/promises";
+import { parseArgs } from "util";
+
+const args = parseArgs({
+	options: {
+		wPlacePath: { type: "string", short: "w", default: "C:/Users/jazza/Downloads/wplace" },
+		sevenZipPath: { type: "string", short: "7", default: "C:/Program Files/7-Zip/7z.exe" },
+		help: { type: "boolean", short: "h", default: false },
+	},
+}).values;
+
+if (args.help) {
+	console.log(`Usage: tsx run-pull.ts [--wPlacePath <path>] [--sevenZipPath <path>] [--help]`);
+	console.log();
+	console.log("Options:");
+	console.log("-w   Path to the wplace folder (C:/Users/jazza/Downloads/wplace or /srv/wplace)");
+	console.log("-7   Path to the 7z executable (C:/Program Files/7-Zip/7z.exe or /usr/bin/7z)");
+	console.log("-h   Show this help message");
+	process.exit(0);
+}
 
 const baseDir = import.meta.dirname;
 const runPullPath = path.join(baseDir, "run-pull.ts");
-const wPlacePath = "C:/Users/jazza/Downloads/wplace";
-const sevenZipPath = "C:/Program Files/7-Zip/7z.exe";
+const wPlacePath = args.wPlacePath || "C:/Users/jazza/Downloads/wplace"; // Or /srv/wplace
+const sevenZipPath = args.sevenZipPath || "C:/Program Files/7-Zip/7z.exe"; // Or /usr/bin/7z  or "7z" if in PATH
 
 const folderToRename = "tiles";
 const tilesXRegex = /^tiles-(\d+)(?:\.7z)?$/;
 
 function runPull() {
 	return new Promise<void>((resolve, reject) => {
-		const runPull = fork(runPullPath);
+		const runPull = fork(runPullPath, { env: { ...process.env, WPLACE_PATH: wPlacePath } });
 
 		runPull.on("exit", (code) => {
 			console.log(`run-pull exited with code ${code}`);

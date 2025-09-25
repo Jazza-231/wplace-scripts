@@ -13,7 +13,11 @@ configDotenv({ quiet: true });
 // This WAS a real hardcoded URL, but it's now in my .env, and it has been re-rolled, so git history won't leak a working URL
 const proxyListURL = process.env.PROXY_LIST_URL;
 if (!proxyListURL) throw new Error("PROXY_LIST_URL not set");
-const basePath = "C:/Users/jazza/Downloads/wplace/";
+
+const WPLACE_PATH = process.env.WPLACE_PATH;
+if (!WPLACE_PATH) throw new Error("WPLACE_PATH not set");
+
+const basePath = WPLACE_PATH || "C:/Users/jazza/Downloads/wplace/";
 const wPlaceURL = "https://backend.wplace.live/files/s0/tiles/{x}/{y}.png";
 
 const argsArr = process.argv.slice(2);
@@ -41,7 +45,7 @@ const maxY = args?.maxY ?? 2047;
 
 const totalTasks = (maxX - minX + 1) * (maxY - minY + 1);
 
-const concurrency = 900;
+const concurrency = 1200;
 const minTime = 0;
 
 const SECOND = 1000;
@@ -289,7 +293,7 @@ const MAX_ATTEMPTS = 20;
 const BASE_DELAY_MS = 400;
 const BACKOFF = 1.6;
 const JITTER_MS = 200;
-const LEASE_MS = MINUTE;
+const LEASE_MS = 20 * SECOND;
 
 function computeDelay(attempt: number) {
 	const backoffDelay = BASE_DELAY_MS * Math.pow(BACKOFF, Math.max(0, attempt - 1));

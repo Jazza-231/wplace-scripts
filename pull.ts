@@ -45,7 +45,7 @@ const maxY = args?.maxY ?? 2047;
 
 const totalTasks = (maxX - minX + 1) * (maxY - minY + 1);
 
-const concurrency = 1200;
+const concurrency = 1000;
 const minTime = 0;
 
 const SECOND = 1000;

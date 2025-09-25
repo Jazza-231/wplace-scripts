@@ -8,6 +8,7 @@ const args = parseArgs({
 	options: {
 		wPlacePath: { type: "string", short: "w", default: "C:/Users/jazza/Downloads/wplace" },
 		sevenZipPath: { type: "string", short: "7", default: "C:/Program Files/7-Zip/7z.exe" },
+		splits: { type: "string", short: "s", default: "12" },
 		help: { type: "boolean", short: "h", default: false },
 	},
 }).values;
@@ -18,6 +19,7 @@ if (args.help) {
 	console.log("Options:");
 	console.log("-w   Path to the wplace folder (C:/Users/jazza/Downloads/wplace or /srv/wplace)");
 	console.log("-7   Path to the 7z executable (C:/Program Files/7-Zip/7z.exe or /usr/bin/7z)");
+	console.log("-s   Number of splits to use (8)");
 	console.log("-h   Show this help message");
 	process.exit(0);
 }
@@ -32,7 +34,9 @@ const tilesXRegex = /^tiles-(\d+)(?:\.7z)?$/;
 
 function runPull() {
 	return new Promise<void>((resolve, reject) => {
-		const runPull = fork(runPullPath, { env: { ...process.env, WPLACE_PATH: wPlacePath } });
+		const runPull = fork(runPullPath, {
+			env: { ...process.env, WPLACE_PATH: wPlacePath, splits: args.splits },
+		});
 
 		runPull.on("exit", (code) => {
 			console.log(`run-pull exited with code ${code}`);

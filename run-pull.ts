@@ -13,7 +13,7 @@ if (!WPLACE_PATH) {
 
 const basePath = import.meta.dirname;
 const pullScript = path.join(basePath, "pull.ts");
-const splits = 12;
+const splits = parseInt(process.env.SPLITS || "8", 10);
 
 const minX = 0,
 	maxX = 2047,

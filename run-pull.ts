@@ -72,9 +72,11 @@ for (let i = 0; i < splits; i++) {
 		console.log(`Starting child ${i}: idle`);
 		continue;
 	}
-	const [splitMinX, splitMaxX] = r;
 
-	const child = fork(pullScript, {
+	const [splitMinX, splitMaxX] = r;
+	const args = [`--minX=${splitMinX}`, `--maxX=${splitMaxX}`, `--minY=${minY}`, `--maxY=${maxY}`];
+
+	const child = fork(pullScript, args, {
 		execArgv: ["--import", "tsx"],
 		silent: true,
 		env: { ...process.env, WP_WPLACE_PATH, WP_CONCURRENT },

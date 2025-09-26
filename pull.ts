@@ -28,7 +28,29 @@ if (!(WP_WPLACE_PATH && WP_CONCURRENT)) {
 const wPlacePath = WP_WPLACE_PATH;
 const wPlaceURL = "https://backend.wplace.live/files/s0/tiles/{x}/{y}.png";
 
-const { minX, maxX, minY, maxY } = DEFAULT_CONFIG.TILE_BOUNDS;
+const argsArr = process.argv.slice(2);
+
+function parseArg(arg: string) {
+	const argRegex = /^--(\w+)=(.+)$/;
+	if (!argRegex.test(arg)) return null;
+
+	const argName = arg.replace(argRegex, "$1");
+	const argValue = +arg.replace(argRegex, "$2");
+
+	return { [argName]: argValue };
+}
+
+const args = argsArr
+	.map(parseArg)
+	.filter((a) => a)
+	.reduce((a, b) => ({ ...a, ...b }), {});
+
+// INCLUSIVE
+const tb = DEFAULT_CONFIG.TILE_BOUNDS;
+const minX = args?.minX ?? tb.minX;
+const maxX = args?.maxX ?? tb.maxX;
+const minY = args?.minY ?? tb.minY;
+const maxY = args?.maxY ?? tb.maxY;
 
 const totalTasks = (maxX - minX + 1) * (maxY - minY + 1);
 

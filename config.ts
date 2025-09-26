@@ -45,9 +45,9 @@ const osDefaults: OSDefaults = {
  */
 export const DEFAULT_CONFIG = {
 	/** Number of splits to use; WP_SPLITS env var */
-	SPLITS: 6,
+	SPLITS: 8,
 	/** Number of concurrent tasks to run; WP_CONCURRENT env var */
-	CONCURRENT: 1200,
+	CONCURRENT: 1500,
 	/** INCLUSIVE, the bounds of tiles to process; no env var, isn't configurable */
 	TILE_BOUNDS: {
 		minX: 0,

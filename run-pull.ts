@@ -106,8 +106,8 @@ for (let i = 0; i < splits; i++) {
 			const filesMatch = output.match(/All tasks finished. Done=(\d+), Failed=\d+, Files=(\d+)/);
 			if (filesMatch) {
 				const [, checked, made] = filesMatch;
-				totalFilesChecked = parseInt(checked);
-				totalFilesMade = parseInt(made);
+				totalFilesChecked += parseInt(checked);
+				totalFilesMade += parseInt(made);
 			}
 		}
 	});
@@ -136,8 +136,8 @@ for (let i = 0; i < splits; i++) {
 				maxX,
 				minY,
 				maxY,
-				totalFilesChecked: totalFilesChecked + " (approximate)",
-				totalFilesMade: totalFilesMade + " (approximate)",
+				totalFilesChecked,
+				totalFilesMade,
 			};
 
 			const logFile = path.join(

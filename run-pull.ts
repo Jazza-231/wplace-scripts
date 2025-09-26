@@ -1,26 +1,28 @@
 import path from "path";
 import fs from "fs";
 import { fork } from "child_process";
+import { DEFAULT_CONFIG } from "./config";
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 
-const WPLACE_PATH = process.env.WPLACE_PATH;
-if (!WPLACE_PATH) {
-	throw new Error("WPLACE_PATH environment variable is not set");
+const WP_WPLACE_PATH = process.env.WP_WPLACE_PATH;
+const WP_SPLITS = process.env.WP_SPLITS;
+const WP_CONCURRENT = process.env.WP_CONCURRENT;
+
+if (!(WP_WPLACE_PATH && WP_SPLITS && WP_CONCURRENT)) {
+	console.error(
+		"Environment variables failed to be set by wplace.ts - defaults are passed this way",
+	);
+	process.exit(1);
 }
-const SPLITS = parseInt(process.env.splits || "8");
-const CONCURRENT = process.env.concurrent;
 
 const basePath = import.meta.dirname;
 const pullScript = path.join(basePath, "pull.ts");
-const splits = SPLITS;
+const splits = parseInt(WP_SPLITS);
 
-const minX = 0,
-	maxX = 2047,
-	minY = 0,
-	maxY = 2047;
+const { minX, maxX, minY, maxY } = DEFAULT_CONFIG.TILE_BOUNDS;
 
 const logDir = path.relative(basePath, path.join(basePath, "..", "logs"));
 if (!fs.existsSync(logDir)) {
@@ -62,6 +64,7 @@ function splitRanges(minX: number, maxX: number, splits: number): Array<[number,
 
 const ranges = splitRanges(minX, maxX, splits);
 let totalFilesMade = 0;
+let totalFilesChecked = 0;
 
 for (let i = 0; i < splits; i++) {
 	const r = ranges[i];
@@ -71,12 +74,10 @@ for (let i = 0; i < splits; i++) {
 	}
 	const [splitMinX, splitMaxX] = r;
 
-	const args = [`--minX=${splitMinX}`, `--maxX=${splitMaxX}`, `--minY=${minY}`, `--maxY=${maxY}`];
-
-	const child = fork(pullScript, args, {
+	const child = fork(pullScript, {
 		execArgv: ["--import", "tsx"],
 		silent: true,
-		env: { ...process.env, WPLACE_PATH, concurrent: CONCURRENT },
+		env: { ...process.env, WP_WPLACE_PATH, WP_CONCURRENT },
 	});
 
 	console.log(`Starting child ${i}: X=${splitMinX}-${splitMaxX}`);
@@ -99,6 +100,13 @@ for (let i = 0; i < splits; i++) {
 			});
 		} else {
 			console.log(`Child ${i}: ${output}`);
+
+			const filesMatch = output.match(/All tasks finished. Done=(\d+), Failed=\d+, Files=(\d+)/);
+			if (filesMatch) {
+				const [, checked, made] = filesMatch;
+				totalFilesChecked = parseInt(checked);
+				totalFilesMade = parseInt(made);
+			}
 		}
 	});
 
@@ -106,13 +114,8 @@ for (let i = 0; i < splits; i++) {
 		console.error(`Child ${i} Error: ${data.toString().trim()}`);
 	});
 
-	child.on("exit", (code) => {
+	child.on("close", async (code) => {
 		console.log(`Child ${i} exited with code ${code}`);
-
-		const stats = childStats.get(i);
-		if (stats) {
-			totalFilesMade += stats.files;
-		}
 
 		childStats.delete(i);
 
@@ -131,7 +134,8 @@ for (let i = 0; i < splits; i++) {
 				maxX,
 				minY,
 				maxY,
-				totalFiles: totalFilesMade + "(approximate)",
+				totalFilesChecked: totalFilesChecked + " (approximate)",
+				totalFilesMade: totalFilesMade + " (approximate)",
 			};
 
 			const logFile = path.join(

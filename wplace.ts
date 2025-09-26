@@ -3,33 +3,37 @@ import path from "path";
 import fs from "fs";
 import fsp from "fs/promises";
 import { parseArgs } from "util";
+import { DEFAULT_CONFIG } from "./config.ts";
 
 const args = parseArgs({
 	options: {
-		wPlacePath: { type: "string", short: "w", default: "C:/Users/jazza/Downloads/wplace" },
-		sevenZipPath: { type: "string", short: "7", default: "C:/Program Files/7-Zip/7z.exe" },
-		splits: { type: "string", short: "s", default: "8" },
-		concurrent: { type: "string", short: "c", default: "800" },
+		wPlacePath: { type: "string", short: "w", default: DEFAULT_CONFIG.WPLACE_PATH },
+		sevenZipPath: { type: "string", short: "7", default: DEFAULT_CONFIG.SEVEN_ZIP_PATH },
+		splits: { type: "string", short: "s", default: DEFAULT_CONFIG.SPLITS.toString() },
+		concurrent: { type: "string", short: "c", default: DEFAULT_CONFIG.CONCURRENT.toString() },
 		help: { type: "boolean", short: "h", default: false },
 	},
 }).values;
 
 if (args.help) {
-	console.log(`Usage: tsx run-pull.ts [--wPlacePath <path>] [--sevenZipPath <path>] [--help]`);
+	console.log(`Usage: tsx run-pull.ts [options]`);
 	console.log();
 	console.log("Options:");
-	console.log("-w   Path to the wplace folder (C:/Users/jazza/Downloads/wplace or /srv/wplace)");
-	console.log("-7   Path to the 7z executable (C:/Program Files/7-Zip/7z.exe or /usr/bin/7z)");
-	console.log("-s   Number of splits to use (8)");
-	console.log("-c   Number of concurrent tasks to run (800)");
+	console.log(`-w   Path to the wplace folder (${DEFAULT_CONFIG.WPLACE_PATH})`);
+	console.log(`-7   Path to the 7z executable (${DEFAULT_CONFIG.SEVEN_ZIP_PATH})`);
+	console.log(`-s   Number of splits to use (${DEFAULT_CONFIG.SPLITS})`);
+	console.log(`-c   Number of concurrent tasks to run (${DEFAULT_CONFIG.CONCURRENT})`);
 	console.log("-h   Show this help message");
 	process.exit(0);
 }
 
 const baseDir = import.meta.dirname;
 const runPullPath = path.join(baseDir, "run-pull.ts");
-const wPlacePath = args.wPlacePath || "C:/Users/jazza/Downloads/wplace"; // Or /srv/wplace
-const sevenZipPath = args.sevenZipPath || "C:/Program Files/7-Zip/7z.exe"; // Or /usr/bin/7z  or "7z" if in PATH
+
+const wPlacePath = args.wPlacePath;
+const sevenZipPath = args.sevenZipPath;
+const splits = args.splits;
+const concurrent = args.concurrent;
 
 const folderToRename = "tiles";
 const tilesXRegex = /^tiles-(\d+)(?:\.7z)?$/;
@@ -39,9 +43,9 @@ function runPull() {
 		const runPull = fork(runPullPath, {
 			env: {
 				...process.env,
-				WPLACE_PATH: wPlacePath,
-				splits: args.splits,
-				concurrent: args.concurrent,
+				WP_WPLACE_PATH: wPlacePath,
+				WP_SPLITS: splits,
+				WP_CONCURRENT: concurrent,
 			},
 		});
 

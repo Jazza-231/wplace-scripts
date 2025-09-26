@@ -6,6 +6,7 @@ import Bottleneck from "bottleneck";
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
 import { configDotenv } from "dotenv";
+import { DEFAULT_CONFIG } from "./config";
 
 configDotenv({ quiet: true });
 
@@ -14,39 +15,24 @@ configDotenv({ quiet: true });
 const proxyListURL = process.env.PROXY_LIST_URL;
 if (!proxyListURL) throw new Error("PROXY_LIST_URL not set");
 
-const WPLACE_PATH = process.env.WPLACE_PATH;
-if (!WPLACE_PATH) throw new Error("WPLACE_PATH not set");
-const CONCURRENT = process.env.concurrent;
+const WP_WPLACE_PATH = process.env.WP_WPLACE_PATH;
+const WP_CONCURRENT = process.env.WP_CONCURRENT;
 
-const basePath = WPLACE_PATH || "C:/Users/jazza/Downloads/wplace/";
-const wPlaceURL = "https://backend.wplace.live/files/s0/tiles/{x}/{y}.png";
-
-const argsArr = process.argv.slice(2);
-
-function parseArg(arg: string) {
-	const argRegex = /^--(\w+)=(.+)$/;
-	if (!argRegex.test(arg)) return null;
-
-	const argName = arg.replace(argRegex, "$1");
-	const argValue = +arg.replace(argRegex, "$2");
-
-	return { [argName]: argValue };
+if (!(WP_WPLACE_PATH && WP_CONCURRENT)) {
+	console.error(
+		"Environment variables failed to be set by run-pull.ts - defaults are passed this way",
+	);
+	process.exit(1);
 }
 
-const args = argsArr
-	.map(parseArg)
-	.filter((a) => a)
-	.reduce((a, b) => ({ ...a, ...b }), {});
+const wPlacePath = WP_WPLACE_PATH;
+const wPlaceURL = "https://backend.wplace.live/files/s0/tiles/{x}/{y}.png";
 
-// INCLUSIVE
-const minX = args?.minX ?? 0;
-const maxX = args?.maxX ?? 2047;
-const minY = args?.minY ?? 0;
-const maxY = args?.maxY ?? 2047;
+const { minX, maxX, minY, maxY } = DEFAULT_CONFIG.TILE_BOUNDS;
 
 const totalTasks = (maxX - minX + 1) * (maxY - minY + 1);
 
-const concurrency = CONCURRENT ? +CONCURRENT : 800;
+const concurrency = parseInt(WP_CONCURRENT);
 const minTime = 0;
 
 const SECOND = 1000;
@@ -137,7 +123,7 @@ const proxies = proxyRequestList.map((proxy) => {
 
 const numberOfProxies = proxies.length;
 
-writeCreate(path.join(basePath, "logs", "proxies.json"), JSON.stringify(proxies));
+writeCreate(path.join(wPlacePath, "logs", "proxies.json"), JSON.stringify(proxies));
 
 console.log(`Fetched ${numberOfProxies} proxies`);
 
@@ -169,7 +155,7 @@ function getNextProxy() {
 
 function pathFromCoords(coords: { x: number; y: number }) {
 	return {
-		filePath: path.join(basePath, "tiles", String(coords.x)),
+		filePath: path.join(wPlacePath, "tiles", String(coords.x)),
 		fileName: `${coords.y}.png`,
 	};
 }
@@ -189,8 +175,8 @@ setInterval(() => {
 	if (!errorBuf.length) return;
 	const payload = errorBuf.splice(0).join("\n") + "\n";
 	fs.promises
-		.mkdir(path.join(basePath, "logs"), { recursive: true })
-		.then(() => fs.promises.appendFile(path.join(basePath, "logs", "errors.ndjson"), payload));
+		.mkdir(path.join(wPlacePath, "logs"), { recursive: true })
+		.then(() => fs.promises.appendFile(path.join(wPlacePath, "logs", "errors.ndjson"), payload));
 }, 5000).unref();
 
 function writeCreate(filePath: string, fileContents: string | Buffer) {
@@ -247,7 +233,7 @@ function downloadURL(url: string): Promise<{ code: number; body?: Readable }> {
 
 		const t0 = Date.now();
 
-		request(url, { dispatcher: proxyAgent })
+		request(url, { dispatcher: proxyAgent, headersTimeout: 0.5 * MINUTE, bodyTimeout: MINUTE })
 			.then(async (response) => {
 				const code = response.statusCode;
 
@@ -294,7 +280,7 @@ const MAX_ATTEMPTS = 20;
 const BASE_DELAY_MS = 400;
 const BACKOFF = 1.6;
 const JITTER_MS = 200;
-const LEASE_MS = 10 * SECOND;
+const LEASE_MS = 0.5 * MINUTE;
 
 function computeDelay(attempt: number) {
 	const backoffDelay = BASE_DELAY_MS * Math.pow(BACKOFF, Math.max(0, attempt - 1));
@@ -408,7 +394,11 @@ setInterval(() => {
 
 	const now = Date.now();
 	for (const task of values) {
-		if (task.status === "running" && task.leaseUntil && now > task.leaseUntil) {
+		if (
+			(task.status === "running" || task.status === "queued") &&
+			task.leaseUntil &&
+			now > task.leaseUntil
+		) {
 			console.warn(`Reclaiming stuck task ${task.coords.x}/${task.coords.y}`);
 			retryTask(task, "lease expired");
 		}
@@ -418,7 +408,7 @@ setInterval(() => {
 // --- Pull loop ---
 async function runAll() {
 	for (let x = minX; x <= maxX; x++) {
-		await ensureDirOnce(path.join(basePath, "tiles", String(x)));
+		await ensureDirOnce(path.join(wPlacePath, "tiles", String(x)));
 	}
 
 	while (true) {

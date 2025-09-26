@@ -10,10 +10,12 @@ const WPLACE_PATH = process.env.WPLACE_PATH;
 if (!WPLACE_PATH) {
 	throw new Error("WPLACE_PATH environment variable is not set");
 }
+const SPLITS = parseInt(process.env.splits || "8");
+const CONCURRENT = process.env.concurrent;
 
 const basePath = import.meta.dirname;
 const pullScript = path.join(basePath, "pull.ts");
-const splits = parseInt(process.env.SPLITS || "8", 10);
+const splits = SPLITS;
 
 const minX = 0,
 	maxX = 2047,
@@ -74,7 +76,7 @@ for (let i = 0; i < splits; i++) {
 	const child = fork(pullScript, args, {
 		execArgv: ["--import", "tsx"],
 		silent: true,
-		env: { ...process.env, WPLACE_PATH },
+		env: { ...process.env, WPLACE_PATH, concurrent: CONCURRENT },
 	});
 
 	console.log(`Starting child ${i}: X=${splitMinX}-${splitMaxX}`);

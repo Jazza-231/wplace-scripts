@@ -16,6 +16,7 @@ if (!proxyListURL) throw new Error("PROXY_LIST_URL not set");
 
 const WPLACE_PATH = process.env.WPLACE_PATH;
 if (!WPLACE_PATH) throw new Error("WPLACE_PATH not set");
+const CONCURRENT = process.env.concurrent;
 
 const basePath = WPLACE_PATH || "C:/Users/jazza/Downloads/wplace/";
 const wPlaceURL = "https://backend.wplace.live/files/s0/tiles/{x}/{y}.png";
@@ -45,7 +46,7 @@ const maxY = args?.maxY ?? 2047;
 
 const totalTasks = (maxX - minX + 1) * (maxY - minY + 1);
 
-const concurrency = 1000;
+const concurrency = CONCURRENT ? +CONCURRENT : 800;
 const minTime = 0;
 
 const SECOND = 1000;
@@ -293,7 +294,7 @@ const MAX_ATTEMPTS = 20;
 const BASE_DELAY_MS = 400;
 const BACKOFF = 1.6;
 const JITTER_MS = 200;
-const LEASE_MS = 20 * SECOND;
+const LEASE_MS = 10 * SECOND;
 
 function computeDelay(attempt: number) {
 	const backoffDelay = BASE_DELAY_MS * Math.pow(BACKOFF, Math.max(0, attempt - 1));

@@ -17,11 +17,11 @@ const (
 	sevenZipPath = `C:\Program Files\7-Zip\7z.exe`
 	basePath     = `C:\Users\jazza\Downloads\wplace`
 	startIndex   = 1
-	endIndex     = 84
-	leftX        = 1677
-	rightX       = 1679
-	topY         = 1216
-	bottomY      = 1217
+	endIndex     = 1
+	leftX        = 825
+	rightX       = 826
+	topY         = 793
+	bottomY      = 794
 )
 
 var targets []Target

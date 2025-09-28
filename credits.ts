@@ -3,6 +3,7 @@ import fs from "fs";
 import Bottleneck from "bottleneck";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import ms from "ms";
 
 const execFileAsync = promisify(execFile);
 
@@ -62,7 +63,7 @@ async function getProxies() {
 			return { ip, port, username, password };
 		});
 
-	proxyRequestList = proxyRequestList.splice(0, 100); // Limit for now
+	proxyRequestList = proxyRequestList.splice(0, 500);
 
 	const proxyURLTemplate = "http://{username}:{password}@{ip}:{port}";
 
@@ -181,6 +182,7 @@ const limiter = new Bottleneck({
 	minTime: Math.floor(410 / proxies.length),
 });
 
+// Doing this cuz I may need to go back to an undici-based solution
 function headersToCurlArgs(headers: Record<string, string>): string[] {
 	const args: string[] = [];
 	if (headers["User-Agent"]) {
@@ -200,9 +202,9 @@ async function curlJson(url: string, proxyUrl: string, headers: Record<string, s
 		"--fail-with-body",
 		"--compressed",
 		"--max-time",
-		"300",
+		"30",
 		"--connect-timeout",
-		"100",
+		"10",
 		"--proxy",
 		proxyUrl,
 		...headersToCurlArgs(headers),
@@ -212,7 +214,7 @@ async function curlJson(url: string, proxyUrl: string, headers: Record<string, s
 	try {
 		const { stdout } = await execFileAsync("curl", baseArgs, {
 			encoding: "utf8",
-			timeout: 450_000,
+			timeout: 45_000,
 			maxBuffer: 10 * 1024 * 1024,
 		});
 
@@ -224,7 +226,7 @@ async function curlJson(url: string, proxyUrl: string, headers: Record<string, s
 	}
 }
 
-const COUNT = 300;
+const COUNT = Infinity;
 
 const tasks: Promise<void>[] = [];
 
@@ -234,40 +236,47 @@ for (let i = 0; i < Math.min(COUNT, numberOfCoords); i++) {
 			const coord = coords[i];
 			const url = `https://backend.wplace.live/s0/pixel/${coord.tileX}/${coord.tileY}?x=${coord.pixelX}&y=${coord.pixelY}`;
 
-			console.log(`Checking ${i + 1} of ${numberOfCoords}`);
+			console.log(`Checking ${i + 1} of ${COUNT}`);
 
-			const proxy = pickNextProxy(proxies);
 			const headers = getHeaders();
 
-			try {
-				const data = await curlJson(url, proxy, headers);
-
-				if (data && isPixel(data)) {
-					if (isPainted(data)) {
-						const key = data.paintedBy.id;
-						if (key in credits) {
-							credits[key].paintedPixelsCount++;
-						} else {
-							credits[key] = {
-								id: data.paintedBy.id,
-								name: data.paintedBy.name,
-								allianceId: data.paintedBy.allianceId,
-								allianceName: data.paintedBy.allianceName,
-								equippedFlag: data.paintedBy.equippedFlag,
-								picture: data.paintedBy.picture,
-								paintedPixelsCount: 1,
-							};
+			while (true) {
+				const proxy = pickNextProxy(proxies);
+				try {
+					const data = await curlJson(url, proxy, headers);
+					if (data && isPixel(data)) {
+						if (isPainted(data)) {
+							const key = data.paintedBy.id;
+							if (key in credits) {
+								credits[key].paintedPixelsCount++;
+							} else {
+								credits[key] = {
+									id: data.paintedBy.id,
+									name: data.paintedBy.name,
+									allianceId: data.paintedBy.allianceId,
+									allianceName: data.paintedBy.allianceName,
+									equippedFlag: data.paintedBy.equippedFlag,
+									picture: data.paintedBy.picture,
+									paintedPixelsCount: 1,
+								};
+							}
 						}
 					}
+					break;
+				} catch (err: any) {
+					console.error(`curl error via ${proxy}:`, err?.message || err);
+					await new Promise((r) => setTimeout(r, 500));
 				}
-			} catch (err: any) {
-				console.error(`curl error via ${proxy}:`, err?.message || err);
 			}
 		}),
 	);
 }
 
+const start = Date.now();
 await Promise.all(tasks);
+const end = Date.now();
+
+console.log(`Took ${ms(end - start, { long: true })} to process ${COUNT} coords`);
 
 const sortedCredits = Object.entries(credits)
 	.sort((a, b) => b[1].paintedPixelsCount - a[1].paintedPixelsCount)

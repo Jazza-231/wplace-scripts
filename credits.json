@@ -1,52 +1,52 @@
 [
-  {
-    "id": 1897421,
-    "name": "Kennedt00",
-    "allianceId": 0,
-    "allianceName": "",
-    "equippedFlag": 0,
-    "picture": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAs0lEQVR42uRRQQrCMBCc1XqVgu/IWcStePDUJ+QHpR+o4D98iwdBaor39A8+IytBSGNLDzk7p80yk8xMMkCQggUS8WeCzfsCgJJqFfEvEHMxx7C2t7YfWzLGxLL1rWqa81QmAiJvacBufySiA2/jZVmWAIrCX8en6if0q3uslm7kKs/zMHf3axYOzAzAuUGgtZ6mopj9hTHPYD0slVKeHWWQuZZU2/qpromQ/A8APgEAAP//n3Qy+NQSabQAAAAASUVORK5CYII=",
-    "paintedPixelsCount": 270
-  },
-  {
-    "id": 5505808,
-    "name": "Yinro",
-    "allianceId": 350854,
-    "allianceName": "SCP RESISTANCE",
-    "equippedFlag": 0,
-    "paintedPixelsCount": 17
-  },
-  {
-    "id": 914,
-    "name": "A_Jesus",
-    "allianceId": 18,
-    "allianceName": "GER FLAG",
-    "equippedFlag": 82,
-    "paintedPixelsCount": 3
-  },
-  {
-    "id": 1420856,
-    "name": "Jangler",
-    "allianceId": 0,
-    "allianceName": "",
-    "equippedFlag": 0,
-    "paintedPixelsCount": 3
-  },
-  {
-    "id": 2725014,
-    "name": "Legotex9",
-    "allianceId": 0,
-    "allianceName": "",
-    "equippedFlag": 82,
-    "paintedPixelsCount": 3
-  },
-  {
-    "id": 779151,
-    "name": "Boscawinks",
-    "allianceId": 69971,
-    "allianceName": "OchHerm",
-    "equippedFlag": 0,
-    "picture": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAvUlEQVR42mIRWLeMgRTAxEAiIFkDC5z1ISgKjzq4y1mQRTUC5jEwMFxfn3j58mUGBoYbN27ULfsCYmxIwuckzcD5urq6DAwMENU4nYRsNgSsajKBMPQ24NCQ6W4KYUzfeZqBgWFaSRIBG/LyEzS9shkZGfO2TWVhYJix68z///+vb5s6Y9cZ7BpArto2NcPNZNLEBQwMDBluJte3TcVnA0RdXn4CmghODbgU4dSA7FbCGohMhbRPfIAAAAD//yrFPmY7EvQXAAAAAElFTkSuQmCC",
-    "paintedPixelsCount": 1
-  }
+	{
+		"id": 1897421,
+		"name": "Kennedt00",
+		"allianceId": 0,
+		"allianceName": "",
+		"equippedFlag": 0,
+		"picture": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAs0lEQVR42uRRQQrCMBCc1XqVgu/IWcStePDUJ+QHpR+o4D98iwdBaor39A8+IytBSGNLDzk7p80yk8xMMkCQggUS8WeCzfsCgJJqFfEvEHMxx7C2t7YfWzLGxLL1rWqa81QmAiJvacBufySiA2/jZVmWAIrCX8en6if0q3uslm7kKs/zMHf3axYOzAzAuUGgtZ6mopj9hTHPYD0slVKeHWWQuZZU2/qpromQ/A8APgEAAP//n3Qy+NQSabQAAAAASUVORK5CYII=",
+		"paintedPixelsCount": 273
+	},
+	{
+		"id": 5505808,
+		"name": "Yinro",
+		"allianceId": 350854,
+		"allianceName": "SCP RESISTANCE",
+		"equippedFlag": 0,
+		"paintedPixelsCount": 17
+	},
+	{
+		"id": 914,
+		"name": "A_Jesus",
+		"allianceId": 18,
+		"allianceName": "GER FLAG",
+		"equippedFlag": 82,
+		"paintedPixelsCount": 3
+	},
+	{
+		"id": 1420856,
+		"name": "Jangler",
+		"allianceId": 0,
+		"allianceName": "",
+		"equippedFlag": 0,
+		"paintedPixelsCount": 3
+	},
+	{
+		"id": 2725014,
+		"name": "Legotex9",
+		"allianceId": 0,
+		"allianceName": "",
+		"equippedFlag": 82,
+		"paintedPixelsCount": 3
+	},
+	{
+		"id": 779151,
+		"name": "Boscawinks",
+		"allianceId": 69971,
+		"allianceName": "OchHerm",
+		"equippedFlag": 0,
+		"picture": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAvUlEQVR42mIRWLeMgRTAxEAiIFkDC5z1ISgKjzq4y1mQRTUC5jEwMFxfn3j58mUGBoYbN27ULfsCYmxIwuckzcD5urq6DAwMENU4nYRsNgSsajKBMPQ24NCQ6W4KYUzfeZqBgWFaSRIBG/LyEzS9shkZGfO2TWVhYJix68z///+vb5s6Y9cZ7BpArto2NcPNZNLEBQwMDBluJte3TcVnA0RdXn4CmghODbgU4dSA7FbCGohMhbRPfIAAAAD//yrFPmY7EvQXAAAAAElFTkSuQmCC",
+		"paintedPixelsCount": 1
+	}
 ]

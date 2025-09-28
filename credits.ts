@@ -1,7 +1,10 @@
 import { configDotenv } from "dotenv";
-import { ProxyAgent, request } from "undici";
 import fs from "fs";
 import Bottleneck from "bottleneck";
+import { execFile } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 const MINUTE = 60 * 1000;
 const OUT_PATH = "./credits.json";
@@ -48,34 +51,28 @@ async function getProxies() {
 	const proxyListURL = process.env.PROXY_LIST_URL;
 	if (!proxyListURL) throw new Error("No proxy list URL provided");
 
-	const proxyRequest = await fetch(proxyListURL);
-	const proxyText = (await proxyRequest.text()).trim();
+	const response = await fetch(proxyListURL);
+	const proxyText = (await response.text()).trim();
 
 	let proxyRequestList = proxyText
-		.split("\r\n")
+		.split(/\r?\n/)
 		.map((proxy) => proxy.split(":"))
 		.map((proxy) => {
-			let [ip, port, username, password] = proxy;
-
-			return {
-				ip,
-				port,
-				username,
-				password,
-			};
+			const [ip, port, username, password] = proxy;
+			return { ip, port, username, password };
 		});
 
-	proxyRequestList = proxyRequestList.splice(0, 20); // Limit to first 20 proxies
+	proxyRequestList = proxyRequestList.splice(0, 100); // Limit for now
 
 	const proxyURLTemplate = "http://{username}:{password}@{ip}:{port}";
 
-	return proxyRequestList.map((proxy) => {
-		return proxyURLTemplate
+	return proxyRequestList.map((proxy) =>
+		proxyURLTemplate
 			.replace("{username}", proxy.username)
 			.replace("{password}", proxy.password)
 			.replace("{ip}", proxy.ip)
-			.replace("{port}", proxy.port);
-	});
+			.replace("{port}", proxy.port),
+	);
 }
 
 let currentProxyIndex = 0;
@@ -86,33 +83,12 @@ function pickNextProxy(proxies: string[]) {
 	return proxy;
 }
 
-const agentByProxy = new Map<string, ProxyAgent>();
-
-function getAgent(proxyURI: string) {
-	let agent = agentByProxy.get(proxyURI);
-	if (!agent) {
-		agent = new ProxyAgent({
-			uri: proxyURI,
-			connections: 64,
-			pipelining: 8,
-			keepAliveTimeout: 5 * MINUTE,
-			keepAliveMaxTimeout: 5 * MINUTE,
-			connectTimeout: MINUTE,
-			autoSelectFamily: true,
-			connect: { timeout: MINUTE },
-		});
-		agentByProxy.set(proxyURI, agent);
-	}
-	return agent;
-}
-
 function getHeaders() {
 	const headers = {
 		"User-Agent":
 			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 		Accept: "application/json",
 		"Accept-Language": "en-AU,en;q=0.9",
-		"Accept-Encoding": "gzip, deflate",
 		Referer: "https://wplace.live/",
 		Origin: "https://wplace.live",
 	};
@@ -180,6 +156,7 @@ const coordGenerator = function* (topLeft: Coord, bottomRight: Coord): Generator
 
 const coords = [...coordGenerator(topLeft, bottomRight)];
 const numberOfCoords = coords.length;
+
 const credits: Record<
 	number,
 	{
@@ -199,36 +176,74 @@ const proxies = await getProxies();
 console.log(`Using ${proxies.length} proxies...`);
 console.log(`Checking ${numberOfCoords} coords...`);
 
-// https://backend.wplace.live/s0/pixel/1069/671?x=912&y=334
-
 const limiter = new Bottleneck({
 	maxConcurrent: proxies.length,
-	// minTime: Math.floor(410 / proxies.length),
-	minTime: Math.floor(410),
+	minTime: Math.floor(410 / proxies.length),
 });
 
-for (let i = 0; i < 100; i++) {
-	limiter.schedule(async () => {
-		const coord = coords[i];
-		const url = `https://backend.wplace.live/s0/pixel/${coord.tileX}/${coord.tileY}?x=${coord.pixelX}&y=${coord.pixelY}`;
+function headersToCurlArgs(headers: Record<string, string>): string[] {
+	const args: string[] = [];
+	if (headers["User-Agent"]) {
+		args.push("--user-agent", headers["User-Agent"]);
+	}
+	for (const [k, v] of Object.entries(headers)) {
+		if (k === "User-Agent") continue;
+		args.push("-H", `${k}: ${v}`);
+	}
+	return args;
+}
 
-		console.log(`Checking ${i + 1} of ${numberOfCoords}`);
+async function curlJson(url: string, proxyUrl: string, headers: Record<string, string>) {
+	const baseArgs = [
+		"--silent",
+		"--show-error",
+		"--fail-with-body",
+		"--compressed",
+		"--max-time",
+		"300",
+		"--connect-timeout",
+		"100",
+		"--proxy",
+		proxyUrl,
+		...headersToCurlArgs(headers),
+		url,
+	];
 
-		try {
-			const dispatcher = getAgent(pickNextProxy(proxies));
+	try {
+		const { stdout } = await execFileAsync("curl", baseArgs, {
+			encoding: "utf8",
+			timeout: 450_000,
+			maxBuffer: 10 * 1024 * 1024,
+		});
+
+		if (!stdout) throw new Error("Empty response body");
+		const text = stdout.trim();
+		return JSON.parse(text);
+	} catch (err: any) {
+		throw err;
+	}
+}
+
+const COUNT = 300;
+
+const tasks: Promise<void>[] = [];
+
+for (let i = 0; i < Math.min(COUNT, numberOfCoords); i++) {
+	tasks.push(
+		limiter.schedule(async () => {
+			const coord = coords[i];
+			const url = `https://backend.wplace.live/s0/pixel/${coord.tileX}/${coord.tileY}?x=${coord.pixelX}&y=${coord.pixelY}`;
+
+			console.log(`Checking ${i + 1} of ${numberOfCoords}`);
+
+			const proxy = pickNextProxy(proxies);
 			const headers = getHeaders();
 
-			const response = await request(url, {
-				dispatcher,
-				headers,
-			});
-
-			if (response.statusCode === 200) {
-				const data = await response.body.json();
+			try {
+				const data = await curlJson(url, proxy, headers);
 
 				if (data && isPixel(data)) {
 					if (isPainted(data)) {
-						// Painted pixel
 						const key = data.paintedBy.id;
 						if (key in credits) {
 							credits[key].paintedPixelsCount++;
@@ -245,15 +260,18 @@ for (let i = 0; i < 100; i++) {
 						}
 					}
 				}
-			} else {
-				console.log(response.statusCode);
+			} catch (err: any) {
+				console.error(`curl error via ${proxy}:`, err?.message || err);
 			}
-		} catch (err) {
-			console.error(err);
-		}
-	});
+		}),
+	);
 }
 
-console.log(credits);
+await Promise.all(tasks);
 
-fs.writeFileSync(OUT_PATH, JSON.stringify(credits, null, 2), { encoding: "utf-8" });
+const sortedCredits = Object.entries(credits)
+	.sort((a, b) => b[1].paintedPixelsCount - a[1].paintedPixelsCount)
+	.map(([_, v]) => v);
+
+fs.writeFileSync(OUT_PATH, JSON.stringify(sortedCredits, null, 2), { encoding: "utf-8" });
+console.log(`Wrote ${OUT_PATH}`);

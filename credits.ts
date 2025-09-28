@@ -262,6 +262,13 @@ for (let i = 0; i < Math.min(COUNT, numberOfCoords); i++) {
 							}
 						}
 					}
+
+					if (i % 1000 === 0) {
+						// Breaks the json, but only if it fails to finish
+						fs.writeFileSync(OUT_PATH, `${i}\n` + JSON.stringify(credits, null, 2), {
+							encoding: "utf-8",
+						});
+					}
 					break;
 				} catch (err: any) {
 					console.error(`curl error via ${proxy}:`, err?.message || err);

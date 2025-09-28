@@ -175,7 +175,6 @@ console.log("Fetching proxies...");
 const proxies = await getProxies();
 
 console.log(`Using ${proxies.length} proxies...`);
-console.log(`Checking ${numberOfCoords} coords...`);
 
 const limiter = new Bottleneck({
 	maxConcurrent: proxies.length,
@@ -226,7 +225,8 @@ async function curlJson(url: string, proxyUrl: string, headers: Record<string, s
 	}
 }
 
-const COUNT = Infinity;
+const COUNT = numberOfCoords;
+console.log(`Checking ${COUNT} coords...`);
 
 const tasks: Promise<void>[] = [];
 

@@ -21,11 +21,11 @@ type Target struct {
 const (
 	basePath        = `C:\Users\jazza\Downloads\wplace`
 	startIndex      = 1
-	endIndex        = 60
-	leftX           = 1130
-	rightX          = 1131
-	topY            = 464
-	bottomY         = 465
+	endIndex        = 120
+	leftX           = 777
+	rightX          = 782
+	topY            = 298
+	bottomY         = 302
 	deleteOriginals = true
 )
 

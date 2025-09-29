@@ -12,14 +12,14 @@ import (
 
 func main() {
 	basePath := `C:\Users\jazza\Downloads\wplace`
-	x, y := 1130, 465
+	x, y := 565, 735
 
 	// Crop rectangle: (left, top, right, bottom)
 	// If using gimp, left and top are inclusive, right and bottom are exclusive
 	// So to crop 504,226 to 672,458 you need 504,226,673,459
-	cropRect := image.Rect(932, 913, 1756, 1639)
+	cropRect := image.Rect(780, 140, 2000, 1300)
 
-	for i := 1; i <= 60; i++ {
+	for i := 1; i <= 120; i++ {
 		fileName := fmt.Sprintf("%d-X%d-Y%d.png", i, x, y)
 		path := filepath.Join(basePath, fileName)
 

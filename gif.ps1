@@ -1,5 +1,9 @@
 # ffmpeg -y -framerate [FPS] -start_number 1 -i "[input image with %d as number]" -gifflags +offsetting+transdiff -filter_complex "split[s0][s1];[s0]palettegen=stats_mode=single:max_colors=64[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle" -loop 0 "[output.gif]"
 
-ffmpeg -y -framerate 10 -start_number 1 -i "C:\Users\jazza\Downloads\wplace\%d-X1130-Y465.png" -gifflags +offsetting+transdiff -filter_complex "split[s0][s1];[s0]palettegen=stats_mode=full:max_colors=64[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle" -loop 0 "C:\Users\jazza\Downloads\animated.gif"
+# ffmpeg -y -framerate 10 -start_number 1 -i "C:\Users\jazza\Downloads\wplace\%d-X1130-Y465.png" -gifflags +offsetting+transdiff -filter_complex "split[s0][s1];[s0]palettegen=stats_mode=full:max_colors=64[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle" -loop 0 "C:\Users\jazza\Downloads\animated.gif"
+
+# I love ffmpeg but it's just not working for gifs
+
+"C:\Users\jazza\Documents\Apps\gifski-1.32.0\win\gifski.exe" --fps 10 --width 20000 --quality 70 -o "../animated.gif" "../*-X777-Y302.png"
 
 # ffmpeg -y -framerate 10 -start_number 1 -i "C:\Users\jazza\Downloads\wplace\%d-X479-Y767.png" -gifflags +offsetting+transdiff -filter_complex "format=rgba,colorchannelmixer=aa=1,geq=r='if(alpha(X,Y),r(X,Y),55)':g='if(alpha(X,Y),g(X,Y),53)':b='if(alpha(X,Y),b(X,Y),50)':a=255,split[s0][s1];[s0]palettegen=stats_mode=full:max_colors=64[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle" -loop 0 "C:\Users\jazza\Downloads\animated.gif"

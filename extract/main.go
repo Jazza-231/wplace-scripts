@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -17,11 +18,11 @@ const (
 	sevenZipPath = `C:\Program Files\7-Zip\7z.exe`
 	basePath     = `C:\Users\jazza\Downloads\wplace`
 	startIndex   = 1
-	endIndex     = 120
-	leftX        = 777
-	rightX       = 782
-	topY         = 298
-	bottomY      = 302
+	endIndex     = 130
+	leftX        = 284
+	rightX       = 284
+	topY         = 1309
+	bottomY      = 1310
 )
 
 var targets []Target
@@ -35,15 +36,38 @@ func init() {
 }
 
 func main() {
+	numWorkers := 16
+	numJobs := endIndex - startIndex + 1
+
+	jobs := make(chan int, numJobs)
+	var wg sync.WaitGroup
+	wg.Add(numJobs)
+
+	for range numWorkers {
+		go func() {
+			for i := range jobs {
+				worker(i)
+				wg.Done()
+			}
+		}()
+	}
+
 	for i := startIndex; i <= endIndex; i++ {
-		fmt.Printf("Extracting %d file(s) from tiles-%d.7z in one go...\n", len(targets), i)
-		if err := extractMultipleFromArchive(i, targets); err != nil {
-			fmt.Printf("❌ Failed for tiles-%d.7z: %v\n", i, err)
-			continue
-		}
-		for _, t := range targets {
-			fmt.Printf("✅ Wrote %d-X%s-Y%s.png\n", i, t.X, t.Y)
-		}
+		jobs <- i
+	}
+	close(jobs)
+
+	wg.Wait()
+}
+
+func worker(i int) {
+	fmt.Printf("Extracting %d file(s) from tiles-%d.7z in one go...\n", len(targets), i)
+	if err := extractMultipleFromArchive(i, targets); err != nil {
+		fmt.Printf("Failed for tiles-%d.7z: %v\n", i, err)
+		return
+	}
+	for _, t := range targets {
+		fmt.Printf("Wrote %d-X%s-Y%s.png\n", i, t.X, t.Y)
 	}
 }
 

@@ -3,6 +3,7 @@ import fs from "fs";
 import Bottleneck from "bottleneck";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import ms from "ms";
 
 const execFileAsync = promisify(execFile);
 
@@ -130,7 +131,7 @@ console.log(`Using ${proxies.length} proxies...`);
 
 const limiter = new Bottleneck({
 	maxConcurrent: proxies.length,
-	minTime: Math.floor(410 / proxies.length),
+	minTime: Math.floor(370 / proxies.length),
 });
 
 // Doing this cuz I may need to go back to an undici-based solution
@@ -222,7 +223,17 @@ async function worker() {
 		processed += 1;
 
 		if (processed % 1000 === 0) {
-			console.log(`Checked ${processed} of ${COUNT}`);
+			const elapsedMs = Date.now() - start;
+			const percent = (processed / COUNT) * 100;
+			const rate = processed > 0 ? elapsedMs / processed : Infinity;
+			const remainingMs = isFinite(rate) ? rate * (COUNT - processed) : Infinity;
+
+			console.log(
+				`Checked ${processed}/${COUNT} (${percent.toFixed(2)}%) - elapsed ${ms(elapsedMs, {
+					long: true,
+				})} - remaining ~${isFinite(remainingMs) ? ms(remainingMs, { long: true }) : "unknown"}`,
+			);
+
 			fs.writeFileSync(OUT_PATH, JSON.stringify(regions, null, 2), {
 				encoding: "utf-8",
 			});
@@ -238,7 +249,12 @@ for (let i = 0; i < WORKERS; i++) {
 await Promise.all(workers);
 
 const end = Date.now();
-console.log(`Done in ${(end - start) / 1000}s - processed ${processed}/${COUNT}`);
+const totalMs = end - start;
+console.log(
+	`Done in ${ms(totalMs, {
+		long: true,
+	})} - processed ${processed}/${COUNT} (100.00%) - remaining ~00:00:00`,
+);
 
 const sortedRegions = regions.sort(
 	(a, b) => a.coord.tileX - b.coord.tileX || a.coord.tileY - b.coord.tileY,

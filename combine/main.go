@@ -7,7 +7,6 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"sync"
@@ -22,10 +21,10 @@ const (
 	basePath        = `C:\Users\jazza\Downloads\wplace`
 	startIndex      = 1
 	endIndex        = 130
-	leftX           = 284
-	rightX          = 284
-	topY            = 1309
-	bottomY         = 1310
+	leftX           = 557
+	rightX          = 561
+	topY            = 840
+	bottomY         = 843
 	deleteOriginals = true
 )
 
@@ -47,7 +46,7 @@ func main() {
 
 	xVals, yVals := uniqSortedXY(targets)
 
-	workers := max(1, runtime.NumCPU()-1)
+	workers := 16
 	idxCh := make(chan int)
 	var wg sync.WaitGroup
 	wg.Add(workers)

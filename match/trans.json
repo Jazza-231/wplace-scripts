@@ -1,0 +1,15 @@
+{
+	"type": "pattern",
+	"name": "trans",
+	"axis": "column",
+	"palette": "wplace",
+	"pattern": [
+		{ "atom": { "type": "literal", "value": "60f7f2" }, "len": { "min": 5 } },
+		{ "atom": { "type": "literal", "value": "f38da9" }, "len": { "min": 5 } },
+		{ "atom": { "type": "literal", "value": "ffffff" }, "len": { "min": 5 } },
+		{ "atom": { "type": "literal", "value": "f38da9" }, "len": { "min": 5 } },
+		{ "atom": { "type": "literal", "value": "60f7f2" }, "len": { "min": 5 } }
+	],
+	"group": { "width": { "min": 1 }, "align_on": 0, "align": "top", "tol_px": 0 },
+	"max_matches_per_tile": 1
+}

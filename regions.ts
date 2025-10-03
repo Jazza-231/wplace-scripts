@@ -121,7 +121,7 @@ const regions: {
 	name: string;
 	number: number;
 	countryId: number;
-	coord: Coord;
+	coord: { tileX: number; tileY: number };
 }[] = [];
 
 console.log("Fetching proxies...");
@@ -130,8 +130,8 @@ const proxies = await getProxies();
 console.log(`Using ${proxies.length} proxies...`);
 
 const limiter = new Bottleneck({
-	maxConcurrent: proxies.length,
-	minTime: Math.floor(370 / proxies.length),
+	maxConcurrent: proxies.length * 5,
+	minTime: Math.floor(300 / proxies.length),
 });
 
 // Doing this cuz I may need to go back to an undici-based solution
@@ -201,7 +201,7 @@ async function processCoord(coord: {
 		try {
 			const data = await curlJson(url, proxy, headers);
 			if (data && isPixel(data)) {
-				regions.push({ ...data.region, coord });
+				regions.push({ ...data.region, coord: { tileX: coord.tileX, tileY: coord.tileY } });
 			}
 			break;
 		} catch (err: any) {

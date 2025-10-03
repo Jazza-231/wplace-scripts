@@ -13,14 +13,14 @@ import (
 
 func main() {
 	basePath := `C:\Users\jazza\Downloads\wplace`
-	x, y := 1810, 804
+	x, y := 1241, 733
 	// Crop rectangle: (left, top, right, bottom)
 	// If using gimp, left and top are inclusive, right and bottom are exclusive
 	// So to crop 504,226 to 672,458 you need 504,226,673,459
-	cropRect := image.Rect(917, 641, 1133, 1031)
+	cropRect := image.Rect(16, 809, 598, 1549)
 
 	numWorkers := 32
-	numJobs := 130
+	numJobs := 137
 
 	jobs := make(chan int, numJobs)
 	var wg sync.WaitGroup

@@ -109,8 +109,8 @@ async function compressTiles(folderPath: string): Promise<string> {
 
 	const archivePath = `${folderPath}.7z`;
 	console.log(`Compressing ${folderPath} -> ${archivePath}`);
-	// I should have used smaller blocks from the start, but oh well
-	const args = ["a", "-t7z", "-m0=lzma2", "-ms=64m", archivePath, folderPath];
+	// Add, using 7z, LZMA2 compression, no solid, multi-threaded
+	const args = ["a", "-t7z", "-m0=lzma2", "-ms=off", "mmt=on", archivePath, folderPath];
 
 	// 7z: a = add to archive
 	await runProc(sevenZipPath, args);

@@ -18,11 +18,11 @@ const (
 	sevenZipPath = `C:\Program Files\7-Zip\7z.exe`
 	basePath     = `C:\Users\jazza\Downloads\wplace`
 	startIndex   = 1
-	endIndex     = 137
-	leftX        = 1241
-	rightX       = 1241
-	topY         = 732
-	bottomY      = 733
+	endIndex     = 141
+	leftX        = 1083
+	rightX       = 1083
+	topY         = 695
+	bottomY      = 695
 )
 
 var targets []Target
@@ -36,7 +36,7 @@ func init() {
 }
 
 func main() {
-	numWorkers := 16
+	numWorkers := 24
 	numJobs := endIndex - startIndex + 1
 
 	jobs := make(chan int, numJobs)

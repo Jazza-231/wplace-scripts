@@ -20,11 +20,11 @@ type Target struct {
 const (
 	basePath        = `C:\Users\jazza\Downloads\wplace`
 	startIndex      = 1
-	endIndex        = 137
-	leftX           = 1241
-	rightX          = 1241
-	topY            = 732
-	bottomY         = 733
+	endIndex        = 141
+	leftX           = 1083
+	rightX          = 1083
+	topY            = 695
+	bottomY         = 695
 	deleteOriginals = true
 )
 
@@ -46,7 +46,7 @@ func main() {
 
 	xVals, yVals := uniqSortedXY(targets)
 
-	workers := 16
+	workers := 24
 	idxCh := make(chan int)
 	var wg sync.WaitGroup
 	wg.Add(workers)

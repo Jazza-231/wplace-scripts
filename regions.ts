@@ -7,17 +7,13 @@ import ms from "ms";
 
 const execFileAsync = promisify(execFile);
 
-const OUT_PATH = "./regions.json";
+const OUT_DIR = "./regions";
+const CHECKPOINT_PATH = "./regions.checkpoint.json";
 
 export {};
 configDotenv({ quiet: true });
 
-type Coord = {
-	tileX: number;
-	tileY: number;
-	pixelX: number;
-	pixelY: number;
-};
+type Coord = { tileX: number; tileY: number; pixelX: number; pixelY: number };
 
 type PixelPainted = {
 	paintedBy: {
@@ -68,7 +64,7 @@ function pickNextProxy(proxies: string[]) {
 }
 
 function getHeaders() {
-	const headers = {
+	return {
 		"User-Agent":
 			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 		Accept: "application/json",
@@ -76,13 +72,10 @@ function getHeaders() {
 		Referer: "https://wplace.live/",
 		Origin: "https://wplace.live",
 	};
-
-	return headers;
 }
 
 function isPixel(value: any): value is PixelPainted {
 	if (typeof value !== "object" || value === null) return false;
-
 	if (typeof value.paintedBy !== "object" || value.paintedBy === null) return false;
 	if (typeof value.region !== "object" || value.region === null) return false;
 
@@ -104,29 +97,84 @@ function isPixel(value: any): value is PixelPainted {
 	return paintedByValid && regionValid;
 }
 
-function* getCoords(): Generator<Coord> {
-	for (let tileY = 0; tileY < 2048; tileY++) {
-		for (let tileX = 0; tileX < 2048; tileX++) {
-			yield { tileX, tileY, pixelX: 0, pixelY: 0 };
-		}
+function indexToCoord(i: number): Coord {
+	const tileY = Math.floor(i / 2048);
+	const tileX = i % 2048;
+	return { tileX, tileY, pixelX: 0, pixelY: 0 };
+}
+
+function* getCoords(startIndex: number, endIndex: number): Generator<Coord> {
+	for (let i = startIndex; i < endIndex; i++) yield indexToCoord(i);
+}
+
+const numberOfCoords = 2048 ** 2;
+
+if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
+
+type Checkpoint = { lastCompletedRow: number; nextIndex: number };
+
+function readCheckpoint(): Checkpoint {
+	try {
+		if (!fs.existsSync(CHECKPOINT_PATH)) return { lastCompletedRow: -1, nextIndex: 0 };
+		const raw = fs.readFileSync(CHECKPOINT_PATH, "utf-8");
+		const parsed = JSON.parse(raw) as Partial<Checkpoint>;
+		const lastCompletedRow =
+			typeof parsed.lastCompletedRow === "number" ? parsed.lastCompletedRow : -1;
+		const nextIndex =
+			typeof parsed.nextIndex === "number" &&
+			parsed.nextIndex >= 0 &&
+			parsed.nextIndex < numberOfCoords
+				? parsed.nextIndex
+				: Math.max(0, (lastCompletedRow + 1) * 2048);
+		return { lastCompletedRow, nextIndex };
+	} catch {
+		return { lastCompletedRow: -1, nextIndex: 0 };
 	}
 }
 
-const coordsGen = getCoords();
-const numberOfCoords = 2048 ** 2;
+function writeCheckpoint(cp: Checkpoint) {
+	fs.writeFileSync(CHECKPOINT_PATH, JSON.stringify(cp), { encoding: "utf-8" });
+}
 
-const regions: {
+function rowFile(tileY: number) {
+	return `${OUT_DIR}/tileY-${tileY}.jsonl`;
+}
+
+function writeRegionLine(region: {
 	id: number;
 	cityId: number;
 	name: string;
 	number: number;
 	countryId: number;
 	coord: { tileX: number; tileY: number };
-}[] = [];
+}) {
+	fs.appendFileSync(rowFile(region.coord.tileY), JSON.stringify(region) + "\n", {
+		encoding: "utf-8",
+	});
+}
+
+function sortRowFile(tileY: number) {
+	const file = rowFile(tileY);
+	if (!fs.existsSync(file)) return;
+	const text = fs.readFileSync(file, "utf-8").trim();
+	if (!text) return;
+	const lines = text.split(/\r?\n/);
+	const objs = lines
+		.map((l) => {
+			try {
+				return JSON.parse(l);
+			} catch {
+				return null;
+			}
+		})
+		.filter((x) => x && typeof x === "object");
+	objs.sort((a: any, b: any) => a.coord.tileX - b.coord.tileX);
+	const out = objs.map((o) => JSON.stringify(o)).join("\n") + "\n";
+	fs.writeFileSync(file, out, { encoding: "utf-8" });
+}
 
 console.log("Fetching proxies...");
 const proxies = await getProxies();
-
 console.log(`Using ${proxies.length} proxies...`);
 
 const limiter = new Bottleneck({
@@ -134,12 +182,9 @@ const limiter = new Bottleneck({
 	minTime: Math.floor(300 / proxies.length),
 });
 
-// Doing this cuz I may need to go back to an undici-based solution
 function headersToCurlArgs(headers: Record<string, string>): string[] {
 	const args: string[] = [];
-	if (headers["User-Agent"]) {
-		args.push("--user-agent", headers["User-Agent"]);
-	}
+	if (headers["User-Agent"]) args.push("--user-agent", headers["User-Agent"]);
 	for (const [k, v] of Object.entries(headers)) {
 		if (k === "User-Agent") continue;
 		args.push("-H", `${k}: ${v}`);
@@ -162,30 +207,77 @@ async function curlJson(url: string, proxyUrl: string, headers: Record<string, s
 		...headersToCurlArgs(headers),
 		url,
 	];
-
-	try {
-		const { stdout } = await execFileAsync("curl", baseArgs, {
-			encoding: "utf8",
-			timeout: 45_000,
-			maxBuffer: 10 * 1024 * 1024,
-		});
-
-		if (!stdout) throw new Error("Empty response body");
-		const text = stdout.trim();
-		return JSON.parse(text);
-	} catch (err: any) {
-		throw err;
+	for (;;) {
+		try {
+			const { stdout } = await execFileAsync("curl", baseArgs, {
+				encoding: "utf8",
+				timeout: 45_000,
+				maxBuffer: 10 * 1024 * 1024,
+			});
+			if (!stdout) throw new Error("Empty response body");
+			const text = stdout.trim();
+			return JSON.parse(text);
+		} catch {
+			await new Promise((r) => setTimeout(r, 500));
+		}
 	}
 }
 
 const COUNT = numberOfCoords;
-console.log(`Checking ${COUNT} coords...`);
 
-const WORKERS = Math.min(128, COUNT);
+const cp0 = readCheckpoint();
+const startRow = cp0.lastCompletedRow + 1;
+const startIndex = startRow * 2048;
+const endIndex = COUNT;
+
+if (startRow >= 0 && startRow < 2048) {
+	try {
+		if (fs.existsSync(rowFile(startRow))) fs.unlinkSync(rowFile(startRow));
+	} catch {}
+}
+
+console.log(
+	`Resuming at row tileY=${startRow} (index ${startIndex}/${COUNT}); lastCompletedRow=${cp0.lastCompletedRow}`,
+);
+
+const coordsGen = getCoords(startIndex, endIndex);
+const WORKERS = Math.min(128, endIndex - startIndex);
 
 let processed = 0;
+let absoluteDone = startIndex;
+let lastCompletedRow = cp0.lastCompletedRow;
+let lastLog = Date.now();
+let lastCkpt = Date.now();
+
+const rowDone = new Uint16Array(2048);
+const rowReady: boolean[] = Array(2048).fill(false);
+const rowSealed: boolean[] = Array(2048).fill(false);
+for (let y = 0; y <= lastCompletedRow; y++) {
+	rowDone[y] = 2048;
+	rowReady[y] = true;
+	rowSealed[y] = true;
+}
 
 const start = Date.now();
+
+function maybeSealRows() {
+	while (
+		lastCompletedRow + 1 < 2048 &&
+		rowReady[lastCompletedRow + 1] &&
+		!rowSealed[lastCompletedRow + 1]
+	) {
+		const y = lastCompletedRow + 1;
+		sortRowFile(y);
+		rowSealed[y] = true;
+		lastCompletedRow = y;
+		writeCheckpoint({
+			lastCompletedRow,
+			nextIndex: Math.max(absoluteDone, (lastCompletedRow + 1) * 2048),
+		});
+		console.log(`Row complete & sorted: tileY=${y} (${absoluteDone}/${COUNT})`);
+		lastCkpt = Date.now();
+	}
+}
 
 async function processCoord(coord: {
 	tileX: number;
@@ -196,16 +288,15 @@ async function processCoord(coord: {
 	const url = `https://backend.wplace.live/s0/pixel/${coord.tileX}/${coord.tileY}?x=${coord.pixelX}&y=${coord.pixelY}`;
 	const headers = getHeaders();
 
-	while (true) {
-		const proxy = pickNextProxy(proxies);
+	const proxy = () => pickNextProxy(proxies);
+	for (;;) {
 		try {
-			const data = await curlJson(url, proxy, headers);
+			const data = await curlJson(url, proxy(), headers);
 			if (data && isPixel(data)) {
-				regions.push({ ...data.region, coord: { tileX: coord.tileX, tileY: coord.tileY } });
+				writeRegionLine({ ...data.region, coord: { tileX: coord.tileX, tileY: coord.tileY } });
 			}
-			break;
-		} catch (err: any) {
-			console.error(`curl error via ${proxy}:`, err?.message || err);
+			return;
+		} catch {
 			await new Promise((r) => setTimeout(r, 500));
 		}
 	}
@@ -217,48 +308,54 @@ async function worker() {
 		if (next.done) return;
 
 		const coord = next.value;
-
 		await limiter.schedule(() => processCoord(coord));
 
 		processed += 1;
+		absoluteDone += 1;
 
-		if (processed % 1000 === 0) {
-			const elapsedMs = Date.now() - start;
-			const percent = (processed / COUNT) * 100;
+		const y = coord.tileY;
+		if (!rowReady[y]) {
+			rowDone[y] += 1;
+			if (rowDone[y] === 2048) {
+				rowReady[y] = true;
+				maybeSealRows();
+			}
+		}
+
+		const now = Date.now();
+		if (processed % 250 === 0 || now - lastLog >= 5000) {
+			const elapsedMs = now - start;
+			const percent = (absoluteDone / COUNT) * 100;
 			const rate = processed > 0 ? elapsedMs / processed : Infinity;
-			const remainingMs = isFinite(rate) ? rate * (COUNT - processed) : Infinity;
-
+			const remainingMs = isFinite(rate) ? rate * (COUNT - absoluteDone) : Infinity;
 			console.log(
-				`Checked ${processed}/${COUNT} (${percent.toFixed(2)}%) - elapsed ${ms(elapsedMs, {
+				`Checked ${absoluteDone}/${COUNT} (${percent.toFixed(2)}%) - elapsed ${ms(elapsedMs, {
 					long: true,
 				})} - remaining ~${isFinite(remainingMs) ? ms(remainingMs, { long: true }) : "unknown"}`,
 			);
+			lastLog = now;
+		}
 
-			fs.writeFileSync(OUT_PATH, JSON.stringify(regions, null, 2), {
-				encoding: "utf-8",
-			});
+		if (now - lastCkpt >= 15000) {
+			writeCheckpoint({ lastCompletedRow, nextIndex: absoluteDone });
+			lastCkpt = now;
 		}
 	}
 }
 
 const workers: Promise<void>[] = [];
-for (let i = 0; i < WORKERS; i++) {
-	workers.push(worker());
-}
-
+for (let i = 0; i < WORKERS; i++) workers.push(worker());
 await Promise.all(workers);
+
+maybeSealRows();
 
 const end = Date.now();
 const totalMs = end - start;
+writeCheckpoint({ lastCompletedRow: 2047, nextIndex: COUNT });
+
 console.log(
 	`Done in ${ms(totalMs, {
 		long: true,
-	})} - processed ${processed}/${COUNT} (100.00%) - remaining ~00:00:00`,
+	})} - processed ${absoluteDone}/${COUNT} (100.00%) - remaining ~00:00:00`,
 );
-
-const sortedRegions = regions.sort(
-	(a, b) => a.coord.tileX - b.coord.tileX || a.coord.tileY - b.coord.tileY,
-);
-
-fs.writeFileSync(OUT_PATH, JSON.stringify(sortedRegions, null, 2), { encoding: "utf-8" });
-console.log(`Wrote ${OUT_PATH}`);
+console.log(`Wrote sharded, sorted JSONL files to ${OUT_DIR} and checkpoint to ${CHECKPOINT_PATH}`);

@@ -21,10 +21,10 @@ const (
 	basePath        = `C:\Users\jazza\Downloads\wplace`
 	startIndex      = 1
 	endIndex        = 141
-	leftX           = 1083
-	rightX          = 1083
-	topY            = 695
-	bottomY         = 695
+	leftX           = 353
+	rightX          = 354
+	topY            = 708
+	bottomY         = 708
 	deleteOriginals = true
 )
 

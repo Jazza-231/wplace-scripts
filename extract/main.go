@@ -19,10 +19,10 @@ const (
 	basePath     = `C:\Users\jazza\Downloads\wplace`
 	startIndex   = 1
 	endIndex     = 150
-	leftX        = 1331
-	rightX       = 1332
-	topY         = 763
-	bottomY      = 763
+	leftX        = 431
+	rightX       = 432
+	topY         = 840
+	bottomY      = 840
 )
 
 var targets []Target

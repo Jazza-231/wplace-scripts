@@ -1,3 +1,4 @@
 node_modules
+regions-jsonl
+
 .env
-regions

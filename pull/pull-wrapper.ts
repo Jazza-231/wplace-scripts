@@ -19,7 +19,7 @@ if (!(WP_WPLACE_PATH && WP_SPLITS && WP_CONCURRENT)) {
 }
 
 const basePath = import.meta.dirname;
-const pullScript = path.join(basePath, "pull.ts");
+const pullScript = path.join(basePath, "pull-tiles.ts");
 const splits = parseInt(WP_SPLITS);
 
 const { minX, maxX, minY, maxY } = DEFAULT_CONFIG.TILE_BOUNDS;

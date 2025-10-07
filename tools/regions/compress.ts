@@ -343,7 +343,7 @@ async function doQueryFile(input: string, coordStr: string) {
 		console.log(JSON.stringify({ match: false, file: input, x, y }));
 		return;
 	}
-	console.log(JSON.stringify({ match: true, file: input, x, y, ...res }));
+	console.log(JSON.stringify({ match: true, file: input, x, ...res }));
 }
 
 // ---------- Mass helpers ----------
@@ -428,7 +428,7 @@ async function doMassQuery(inputDir: string, coordStr: string, conc?: number) {
 			const compact = JSON.parse(fs.readFileSync(file, "utf-8")) as Compact;
 			const hit = queryOneCompact(compact, x, y);
 			if (hit) {
-				matches.push({ file, x, y, ...hit });
+				matches.push({ file, x, ...hit });
 			}
 		} catch (e) {
 			console.error(`[mq] Failed ${file}:`, (e as Error).message);

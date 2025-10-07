@@ -16,7 +16,7 @@ const args = parseArgs({
 }).values;
 
 if (args.help) {
-	console.log(`Usage: tsx run-pull.ts [options]`);
+	console.log(`Usage: tsx wplace-archiver.ts [options]`);
 	console.log();
 	console.log("Options:");
 	console.log(`-w   Path to the wplace folder (${DEFAULT_CONFIG.WPLACE_PATH})`);
@@ -28,7 +28,7 @@ if (args.help) {
 }
 
 const baseDir = import.meta.dirname;
-const runPullPath = path.join(baseDir, "run-pull.ts");
+const runPullPath = path.join(baseDir, "pull-wrapper.ts");
 
 const wPlacePath = args.wPlacePath;
 const sevenZipPath = args.sevenZipPath;
@@ -50,10 +50,10 @@ function runPull() {
 		});
 
 		runPull.on("exit", (code) => {
-			console.log(`run-pull exited with code ${code}`);
+			console.log(`pull-wrapper exited with code ${code}`);
 
 			if (code === 0) resolve();
-			else reject(new Error(`run-pull exited with code ${code}`));
+			else reject(new Error(`pull-wrapper exited with code ${code}`));
 		});
 	});
 }

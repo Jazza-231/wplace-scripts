@@ -17,10 +17,10 @@ func main() {
 	// Crop rectangle: (left, top, right, bottom)
 	// If using gimp, left and top are inclusive, right and bottom are exclusive
 	// So to crop 504,226 to 672,458 you need 504,226,673,459
-	cropRect := image.Rect(834, 277, 1773, 747)
+	cropRect := image.Rect(0, 197, 656, 677)
 
 	numWorkers := 24
-	numJobs := 150
+	numJobs := 153
 
 	jobs := make(chan int, numJobs)
 	var wg sync.WaitGroup

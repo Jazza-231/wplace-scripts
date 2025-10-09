@@ -126,6 +126,16 @@ for (let i = 0; i < splits; i++) {
 			const endTime = Date.now();
 			const elapsed = endTime - startTime;
 
+			const archiveIndexRegex = /tiles-(\d+).7z/;
+
+			const archiveIndexes = fs
+				.readdirSync(DEFAULT_CONFIG.WPLACE_PATH, { withFileTypes: true })
+				.filter((f) => f.isFile() && f.name.endsWith(".7z"))
+				.map((f) => f.name.match(archiveIndexRegex)?.[1])
+				.filter((f) => f);
+
+			const biggestArchiveIndex = Math.max(...archiveIndexes.map((i) => parseInt(i ?? "0")));
+
 			const logData = {
 				started: new Date(startTime).toISOString(),
 				finished: new Date(endTime).toISOString(),
@@ -138,6 +148,7 @@ for (let i = 0; i < splits; i++) {
 				maxY,
 				totalFilesChecked,
 				totalFilesMade,
+				archiveIndex: biggestArchiveIndex + 1,
 			};
 
 			const logFile = path.join(

@@ -13,12 +13,12 @@ import (
 
 func main() {
 	basePath := `C:\Users\jazza\Downloads\wplace`
-	x, y := 431, 840
-	startIndex, endIndex := 1, 153
+	x, y := 1860, 1282
+	startIndex, endIndex := 1, 166
 	// Crop rectangle: (left, top, right, bottom)
 	// If using gimp, left and top are inclusive, right and bottom are exclusive
 	// So to crop 504,226 to 672,458 you need 504,226,673,459
-	cropRect := image.Rect(0, 197, 656, 677)
+	cropRect := image.Rect(690, 900, 929, 1072)
 
 	numWorkers := 24
 	numJobs := endIndex - startIndex + 1

@@ -88,6 +88,8 @@ func main() {
 
 	if extract {
 		tilesFolderPath = extractTiles(tempPath, folderNumber)
+		// Defer is so cool... what do you mean that this will run before this main() function returns??
+		defer deleteTilesFolder(tilesFolderPath)
 	} else {
 		tilesFolderPath = getTilesFolderPath(wplacePath, folderNumber, singleFolder)
 	}
@@ -132,6 +134,14 @@ func extractTiles(tempPath string, folderNumber int) (tilesFolderPath string) {
 	fmt.Println("Done!")
 
 	return fmt.Sprintf("%s/tiles-%d", tempPath, folderNumber)
+}
+
+func deleteTilesFolder(tilesFolderPath string) {
+	err := os.RemoveAll(tilesFolderPath)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func runProcess(folderNumber int, processor string, width, height, numWorkers int, tilesFolderPath string, opts ProcessOpts) {

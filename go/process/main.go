@@ -62,6 +62,7 @@ func preCheckExistingFiles(basepath string, width int) map[string]bool {
 
 func main() {
 	folderNumber := 1
+	// folderNumberEnd := 1
 	width, height := 2048, 2048
 	numWorkers := 16
 	singleFolder := false
@@ -88,11 +89,7 @@ func main() {
 	if extract {
 		tilesFolderPath = extractTiles(tempPath, folderNumber)
 	} else {
-		if singleFolder {
-			tilesFolderPath = fmt.Sprintf("%s/tiles-%d", wplacePath, folderNumber)
-		} else {
-			tilesFolderPath = fmt.Sprintf("%s/tiles-%d/tiles-%d", wplacePath, folderNumber, folderNumber)
-		}
+		tilesFolderPath = getTilesFolderPath(wplacePath, folderNumber, singleFolder)
 	}
 
 	runProcess(folderNumber, "count", width, height, numWorkers, tilesFolderPath, ProcessOpts{})
@@ -102,6 +99,16 @@ func main() {
 
 	// runProcess(folderNumber, "mode", width, height, numWorkers, tilesFolderPath, ProcessOpts{IncludeBoring: true})
 	runProcess(folderNumber, "mode", width, height, numWorkers, tilesFolderPath, ProcessOpts{IncludeBoring: false})
+}
+
+func getTilesFolderPath(wplaceOrTemp string, folderNumber int, singleFolder bool) (tilesFolderPath string) {
+	if singleFolder {
+		tilesFolderPath = fmt.Sprintf("%s/tiles-%d", wplaceOrTemp, folderNumber)
+	} else {
+		tilesFolderPath = fmt.Sprintf("%s/tiles-%d/tiles-%d", wplaceOrTemp, folderNumber, folderNumber)
+	}
+
+	return tilesFolderPath
 }
 
 func extractTiles(tempPath string, folderNumber int) (tilesFolderPath string) {

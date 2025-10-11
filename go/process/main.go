@@ -66,12 +66,14 @@ func main() {
 	numWorkers := 16
 	singleFolder := false
 	extract := false
+	tempPath := ""
 
 	folder := flag.Int("f", folderNumber, "The folder number to process")
 	workers := flag.Int("w", numWorkers, "The number of workers to use")
 	wplace := flag.String("p", wplacePath, "The path to the wplace folder, namely the folder containing the tiles-x folder")
 	single := flag.Bool("s", singleFolder, "Whether the archive is tiles-x.7z/tiles-x or just tiles-x.7z")
 	extracting := flag.Bool("e", extract, "Whether to extract the archive automatically or not")
+	temp := flag.String("t", tempPath, "The path to the temporary folder to extract the archive to")
 	flag.Parse()
 
 	folderNumber = *folder
@@ -79,8 +81,9 @@ func main() {
 	wplacePath = *wplace
 	singleFolder = *single
 	extract = *extracting
+	tempPath = *temp
 
-	runProcess(folderNumber, "count", width, height, numWorkers, singleFolder, ProcessOpts{}, extract)
+	runProcess(folderNumber, "count", width, height, numWorkers, singleFolder, ProcessOpts{}, extract, tempPath)
 
 	// runProcess(folderNumber, "average", width, height, numWorkers, singleFolder, ProcessOpts{IncludeTransparency: true}, extract)
 	// runProcess(folderNumber, "average", width, height, numWorkers, singleFolder, ProcessOpts{IncludeTransparency: false}, extract)
@@ -89,19 +92,26 @@ func main() {
 	// runProcess(folderNumber, "mode", width, height, numWorkers, singleFolder, ProcessOpts{IncludeBoring: false}, extract)
 }
 
-func runProcess(folderNumber int, processor string, width, height, numWorkers int, singleFolder bool, opts ProcessOpts, extract bool) {
-	startTime := time.Now()
-	basepath := ""
+func runProcess(folderNumber int, processor string, width, height, numWorkers int, singleFolder bool, opts ProcessOpts, extract bool, tempPath string) {
+	tilesFolderPath := ""
+	tilesArchivePath := fmt.Sprintf("%s/tiles-%d.7z", wplacePath, folderNumber)
+	tilesExtractTo := wplacePath
 
 	if singleFolder || extract {
-		basepath = fmt.Sprintf("%s/tiles-%d", wplacePath, folderNumber)
+		tilesFolderPath = fmt.Sprintf("%s/tiles-%d", wplacePath, folderNumber)
 	} else {
-		basepath = fmt.Sprintf("%s/tiles-%d/tiles-%d", wplacePath, folderNumber, folderNumber)
+		tilesFolderPath = fmt.Sprintf("%s/tiles-%d/tiles-%d", wplacePath, folderNumber, folderNumber)
+	}
+
+	if tempPath != "" && extract {
+		tilesFolderPath = fmt.Sprintf("%s/tiles-%d", tempPath, folderNumber)
+		tilesExtractTo = tempPath
 	}
 
 	if extract {
-		fmt.Printf("Extracting %s.7z...\n", basepath)
-		sevenZArgs := []string{"x", "-o" + wplacePath, basepath + ".7z"}
+		fmt.Printf("Extracting %s to %s\n", tilesArchivePath, tilesExtractTo)
+		// This will extract the X folders into tilesFolderPath
+		sevenZArgs := []string{"x", "-o" + tilesExtractTo, tilesArchivePath}
 
 		err := exec.Command("7z", sevenZArgs...).Run()
 
@@ -113,27 +123,29 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 		fmt.Println("Done!")
 	}
 
-	if !exists(basepath) {
-		fmt.Printf("Folder \"%s\" does not exist!\n", basepath)
+	startTime := time.Now()
+
+	if !exists(tilesFolderPath) {
+		fmt.Printf("Folder \"%s\" does not exist!\n", tilesFolderPath)
 		os.Exit(1)
 	}
 
 	jobs := make(chan Job, 1000)
 	results := make(chan Result, 1000)
-	existingFiles := preCheckExistingFiles(basepath, width)
+	existingFiles := preCheckExistingFiles(tilesFolderPath, width)
 
 	var wg sync.WaitGroup
 
 	for range numWorkers {
 		wg.Add(1)
-		go worker(jobs, results, &wg, processor, basepath, opts)
+		go worker(jobs, results, &wg, processor, tilesFolderPath, opts)
 	}
 
 	go func() {
 		defer close(jobs)
 		for x := range width {
 			for y := range height {
-				filepath := fmt.Sprintf("%s/%d/%d.png", basepath, x, y)
+				filepath := fmt.Sprintf("%s/%d/%d.png", tilesFolderPath, x, y)
 				if existingFiles[filepath] {
 					jobs <- Job{x: x, y: y}
 				} else {
@@ -165,7 +177,7 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 		suffix += "-b"
 	}
 
-	fmt.Printf("Processing %d pixels in %s with %d workers doing %s%s...\n", total, basepath, numWorkers, processor, suffix)
+	fmt.Printf("Processing %d pixels in %s with %d workers doing %s%s...\n", total, tilesFolderPath, numWorkers, processor, suffix)
 
 	for result := range results {
 		pixelData[result.x][result.y] = result.rgb
@@ -244,7 +256,7 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 	if extract {
 		fmt.Println("Deleting extracted files...")
 
-		err := os.RemoveAll(basepath)
+		err := os.RemoveAll(tilesFolderPath)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			os.Exit(1)

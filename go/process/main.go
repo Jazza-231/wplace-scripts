@@ -61,15 +61,16 @@ func preCheckExistingFiles(basepath string, width int) map[string]bool {
 }
 
 func main() {
-	folderNumber := 1
-	// folderNumberEnd := 1
+	folderStart := 1
+	folderEnd := 5
 	width, height := 2048, 2048
 	numWorkers := 16
 	singleFolder := false
 	extract := false
 	tempPath := os.TempDir()
 
-	folder := flag.Int("f", folderNumber, "The folder number to process")
+	start := flag.Int("f", folderStart, "The folder number to process")
+	end := flag.Int("l", folderEnd, "The folder number to process")
 	workers := flag.Int("w", numWorkers, "The number of workers to use")
 	wplace := flag.String("p", wplacePath, "The path to the wplace folder, namely the folder containing the tiles-x folder")
 	single := flag.Bool("s", singleFolder, "Whether the archive is tiles-x.7z/tiles-x or just tiles-x.7z")
@@ -77,30 +78,37 @@ func main() {
 	temp := flag.String("t", tempPath, "The path to the temporary folder to extract the archive to")
 	flag.Parse()
 
-	folderNumber = *folder
+	folderStart = *start
+	folderEnd = *end
 	numWorkers = *workers
 	wplacePath = *wplace
 	singleFolder = *single
 	extract = *extracting
 	tempPath = *temp
 
-	tilesFolderPath := ""
+	tilesByFolder := make(map[int]string)
+	uniquePaths := make(map[string]struct{})
 
-	if extract {
-		tilesFolderPath = extractTiles(tempPath, folderNumber)
-		// Defer is so cool... what do you mean that this will run before this main() function returns??
-		defer deleteTilesFolder(tilesFolderPath)
-	} else {
-		tilesFolderPath = getTilesFolderPath(wplacePath, folderNumber, singleFolder)
+	for folderNum := folderStart; folderNum <= folderEnd; folderNum++ {
+		var p string
+		if extract {
+			p = extractTiles(tempPath, folderNum)
+		} else {
+			p = getTilesFolderPath(wplacePath, folderNum, singleFolder)
+		}
+		tilesByFolder[folderNum] = p
+		uniquePaths[p] = struct{}{}
 	}
 
-	runProcess(folderNumber, "count", width, height, numWorkers, tilesFolderPath, ProcessOpts{})
+	for folderNum := folderStart; folderNum <= folderEnd; folderNum++ {
+		p := tilesByFolder[folderNum]
+		runProcess(folderNum, "count", width, height, numWorkers, p, ProcessOpts{})
+		runProcess(folderNum, "mode", width, height, numWorkers, p, ProcessOpts{IncludeBoring: false})
+	}
 
-	// runProcess(folderNumber, "average", width, height, numWorkers, tilesFolderPath, ProcessOpts{IncludeTransparency: true})
-	// runProcess(folderNumber, "average", width, height, numWorkers, tilesFolderPath, ProcessOpts{IncludeTransparency: false})
-
-	// runProcess(folderNumber, "mode", width, height, numWorkers, tilesFolderPath, ProcessOpts{IncludeBoring: true})
-	runProcess(folderNumber, "mode", width, height, numWorkers, tilesFolderPath, ProcessOpts{IncludeBoring: false})
+	for p := range uniquePaths {
+		deleteTilesFolder(p)
+	}
 }
 
 func getTilesFolderPath(wplaceOrTemp string, folderNumber int, singleFolder bool) (tilesFolderPath string) {

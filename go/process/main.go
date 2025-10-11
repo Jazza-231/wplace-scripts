@@ -87,17 +87,26 @@ func main() {
 	tempPath = *temp
 
 	tilesByFolder := make(map[int]string)
-	uniquePaths := make(map[string]struct{})
+	extractWorkers := 8
 
-	for folderNum := folderStart; folderNum <= folderEnd; folderNum++ {
-		var p string
-		if extract {
-			p = extractTiles(tempPath, folderNum)
-		} else {
-			p = getTilesFolderPath(wplacePath, folderNum, singleFolder)
+	{
+		var mutex sync.Mutex
+		var folders []int
+		for folderNum := folderStart; folderNum <= folderEnd; folderNum++ {
+			folders = append(folders, folderNum)
 		}
-		tilesByFolder[folderNum] = p
-		uniquePaths[p] = struct{}{}
+
+		runWorkers(folders, extractWorkers, func(folderNum int) {
+			var p string
+			if extract {
+				p = extractTiles(tempPath, folderNum)
+			} else {
+				p = getTilesFolderPath(wplacePath, folderNum, singleFolder)
+			}
+			mutex.Lock()
+			tilesByFolder[folderNum] = p
+			mutex.Unlock()
+		})
 	}
 
 	for folderNum := folderStart; folderNum <= folderEnd; folderNum++ {
@@ -106,9 +115,38 @@ func main() {
 		runProcess(folderNum, "mode", width, height, numWorkers, p, ProcessOpts{IncludeBoring: false})
 	}
 
-	for p := range uniquePaths {
-		deleteTilesFolder(p)
+	{
+		var paths []string
+		for _, p := range tilesByFolder {
+			paths = append(paths, p)
+		}
+		runWorkers(paths, extractWorkers, func(p string) {
+			deleteTilesFolder(p)
+		})
 	}
+}
+
+func runWorkers[T any](items []T, numWorkers int, fn func(T)) {
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+
+	var wg sync.WaitGroup
+	jobs := make(chan T)
+
+	for i := 0; i < numWorkers; i++ {
+		wg.Go(func() {
+			for it := range jobs {
+				fn(it)
+			}
+		})
+	}
+
+	for _, it := range items {
+		jobs <- it
+	}
+	close(jobs)
+	wg.Wait()
 }
 
 func getTilesFolderPath(wplaceOrTemp string, folderNumber int, singleFolder bool) (tilesFolderPath string) {

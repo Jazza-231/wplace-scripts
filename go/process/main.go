@@ -66,7 +66,7 @@ func main() {
 	numWorkers := 16
 	singleFolder := false
 	extract := false
-	tempPath := ""
+	tempPath := os.TempDir()
 
 	folder := flag.Int("f", folderNumber, "The folder number to process")
 	workers := flag.Int("w", numWorkers, "The number of workers to use")
@@ -83,46 +83,51 @@ func main() {
 	extract = *extracting
 	tempPath = *temp
 
-	runProcess(folderNumber, "count", width, height, numWorkers, singleFolder, ProcessOpts{}, extract, tempPath)
-
-	// runProcess(folderNumber, "average", width, height, numWorkers, singleFolder, ProcessOpts{IncludeTransparency: true}, extract)
-	// runProcess(folderNumber, "average", width, height, numWorkers, singleFolder, ProcessOpts{IncludeTransparency: false}, extract)
-
-	// runProcess(folderNumber, "mode", width, height, numWorkers, singleFolder, ProcessOpts{IncludeBoring: true}, extract)
-	// runProcess(folderNumber, "mode", width, height, numWorkers, singleFolder, ProcessOpts{IncludeBoring: false}, extract)
-}
-
-func runProcess(folderNumber int, processor string, width, height, numWorkers int, singleFolder bool, opts ProcessOpts, extract bool, tempPath string) {
 	tilesFolderPath := ""
-	tilesArchivePath := fmt.Sprintf("%s/tiles-%d.7z", wplacePath, folderNumber)
-	tilesExtractTo := wplacePath
-
-	if singleFolder || extract {
-		tilesFolderPath = fmt.Sprintf("%s/tiles-%d", wplacePath, folderNumber)
-	} else {
-		tilesFolderPath = fmt.Sprintf("%s/tiles-%d/tiles-%d", wplacePath, folderNumber, folderNumber)
-	}
-
-	if tempPath != "" && extract {
-		tilesFolderPath = fmt.Sprintf("%s/tiles-%d", tempPath, folderNumber)
-		tilesExtractTo = tempPath
-	}
 
 	if extract {
-		fmt.Printf("Extracting %s to %s\n", tilesArchivePath, tilesExtractTo)
-		// This will extract the X folders into tilesFolderPath
-		sevenZArgs := []string{"x", "-o" + tilesExtractTo, tilesArchivePath}
-
-		err := exec.Command("7z", sevenZArgs...).Run()
-
-		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			os.Exit(1)
+		tilesFolderPath = extractTiles(tempPath, folderNumber)
+	} else {
+		if singleFolder {
+			tilesFolderPath = fmt.Sprintf("%s/tiles-%d", wplacePath, folderNumber)
+		} else {
+			tilesFolderPath = fmt.Sprintf("%s/tiles-%d/tiles-%d", wplacePath, folderNumber, folderNumber)
 		}
-
-		fmt.Println("Done!")
 	}
 
+	runProcess(folderNumber, "count", width, height, numWorkers, tilesFolderPath, ProcessOpts{})
+
+	// runProcess(folderNumber, "average", width, height, numWorkers, tilesFolderPath, ProcessOpts{IncludeTransparency: true})
+	// runProcess(folderNumber, "average", width, height, numWorkers, tilesFolderPath, ProcessOpts{IncludeTransparency: false})
+
+	// runProcess(folderNumber, "mode", width, height, numWorkers, tilesFolderPath, ProcessOpts{IncludeBoring: true})
+	runProcess(folderNumber, "mode", width, height, numWorkers, tilesFolderPath, ProcessOpts{IncludeBoring: false})
+}
+
+func extractTiles(tempPath string, folderNumber int) (tilesFolderPath string) {
+	if !exists(tempPath) {
+		fmt.Printf("Creating temp path %s...\n", tempPath)
+		os.Mkdir(tempPath, os.ModePerm)
+	}
+
+	extractFrom := fmt.Sprintf("%s/tiles-%d.7z", wplacePath, folderNumber)
+
+	fmt.Printf("Extracting %s to %s\n", extractFrom, tempPath)
+	sevenZArgs := []string{"x", "-o" + tempPath, extractFrom}
+
+	err := exec.Command("7z", sevenZArgs...).Run()
+
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Done!")
+
+	return fmt.Sprintf("%s/tiles-%d", tempPath, folderNumber)
+}
+
+func runProcess(folderNumber int, processor string, width, height, numWorkers int, tilesFolderPath string, opts ProcessOpts) {
 	startTime := time.Now()
 
 	if !exists(tilesFolderPath) {
@@ -241,7 +246,9 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 	}
 	defer file.Close()
 
-	if err := png.Encode(file, img); err != nil {
+	encoder := png.Encoder{CompressionLevel: png.BestCompression}
+
+	if err := encoder.Encode(file, img); err != nil {
 		panic(err)
 	}
 
@@ -253,17 +260,6 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 	fmt.Printf("Total time: %v\n", totalTime.Round(time.Millisecond))
 	fmt.Printf("Average: %.2f pixels/second\n", float64(total)/totalTime.Seconds())
 
-	if extract {
-		fmt.Println("Deleting extracted files...")
-
-		err := os.RemoveAll(tilesFolderPath)
-		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Println("Done!")
-	}
 }
 
 func exists(basepath string) bool {

@@ -62,15 +62,15 @@ func preCheckExistingFiles(basepath string, width int) map[string]bool {
 
 func main() {
 	folderStart := 1
-	folderEnd := 5
+	folderEnd := -1
 	width, height := 2048, 2048
 	numWorkers := 16
 	singleFolder := false
 	extract := false
 	tempPath := os.TempDir()
 
-	start := flag.Int("f", folderStart, "The folder number to process")
-	end := flag.Int("l", folderEnd, "The folder number to process")
+	start := flag.Int("f", folderStart, "The folder number to start processing at")
+	end := flag.Int("l", folderEnd, "The folder number to end processing at. Omit or set to -1 to process only 1 folder")
 	workers := flag.Int("w", numWorkers, "The number of workers to use")
 	wplace := flag.String("p", wplacePath, "The path to the wplace folder, namely the folder containing the tiles-x folder")
 	single := flag.Bool("s", singleFolder, "Whether the archive is tiles-x.7z/tiles-x or just tiles-x.7z")
@@ -88,6 +88,10 @@ func main() {
 
 	tilesByFolder := make(map[int]string)
 	extractWorkers := 8
+
+	if folderEnd == -1 {
+		folderEnd = folderStart
+	}
 
 	{
 		var mutex sync.Mutex
@@ -183,11 +187,13 @@ func extractTiles(tempPath string, folderNumber int) (tilesFolderPath string) {
 }
 
 func deleteTilesFolder(tilesFolderPath string) {
+	fmt.Fprintf(os.Stderr, "Deleting %s...\n", tilesFolderPath)
 	err := os.RemoveAll(tilesFolderPath)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Println("Done!")
 }
 
 func runProcess(folderNumber int, processor string, width, height, numWorkers int, tilesFolderPath string, opts ProcessOpts) {

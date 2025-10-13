@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"math"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -60,62 +61,165 @@ func preCheckExistingFiles(basepath string, width int) map[string]bool {
 }
 
 func main() {
-	folderNumber := 1
+	folderStart := 1
+	folderEnd := -1
 	width, height := 2048, 2048
 	numWorkers := 16
 	singleFolder := false
+	extract := false
+	tempPath := os.TempDir()
 
-	folder := flag.Int("f", folderNumber, "The folder number to process")
+	start := flag.Int("f", folderStart, "The folder number to start processing at")
+	end := flag.Int("l", folderEnd, "The folder number to end processing at. Omit or set to -1 to process only 1 folder")
 	workers := flag.Int("w", numWorkers, "The number of workers to use")
 	wplace := flag.String("p", wplacePath, "The path to the wplace folder, namely the folder containing the tiles-x folder")
 	single := flag.Bool("s", singleFolder, "Whether the archive is tiles-x.7z/tiles-x or just tiles-x.7z")
+	extracting := flag.Bool("e", extract, "Whether to extract the archive automatically or not")
+	temp := flag.String("t", tempPath, "The path to the temporary folder to extract the archive to")
 	flag.Parse()
 
-	folderNumber = *folder
+	folderStart = *start
+	folderEnd = *end
 	numWorkers = *workers
 	wplacePath = *wplace
 	singleFolder = *single
+	extract = *extracting
+	tempPath = *temp
 
-	runProcess(folderNumber, "count", width, height, numWorkers, singleFolder, ProcessOpts{})
+	tilesByFolder := make(map[int]string)
+	extractWorkers := 8
 
-	runProcess(folderNumber, "average", width, height, numWorkers, singleFolder, ProcessOpts{IncludeTransparency: true})
-	runProcess(folderNumber, "average", width, height, numWorkers, singleFolder, ProcessOpts{IncludeTransparency: false})
-
-	runProcess(folderNumber, "mode", width, height, numWorkers, singleFolder, ProcessOpts{IncludeBoring: true})
-	runProcess(folderNumber, "mode", width, height, numWorkers, singleFolder, ProcessOpts{IncludeBoring: false})
-}
-
-func runProcess(folderNumber int, processor string, width, height, numWorkers int, singleFolder bool, opts ProcessOpts) {
-	startTime := time.Now()
-	basepath := ""
-
-	if singleFolder {
-		basepath = fmt.Sprintf("%s/tiles-%d", wplacePath, folderNumber)
-	} else {
-		basepath = fmt.Sprintf("%s/tiles-%d/tiles-%d", wplacePath, folderNumber, folderNumber)
+	if folderEnd == -1 {
+		folderEnd = folderStart
 	}
 
-	if !exists(basepath) {
-		fmt.Printf("Folder \"%s\" does not exist!\n", basepath)
+	{
+		var mutex sync.Mutex
+		var folders []int
+		for folderNum := folderStart; folderNum <= folderEnd; folderNum++ {
+			folders = append(folders, folderNum)
+		}
+
+		runWorkers(folders, extractWorkers, func(folderNum int) {
+			var p string
+			if extract {
+				p = extractTiles(tempPath, folderNum)
+			} else {
+				p = getTilesFolderPath(wplacePath, folderNum, singleFolder)
+			}
+			mutex.Lock()
+			tilesByFolder[folderNum] = p
+			mutex.Unlock()
+		})
+	}
+
+	for folderNum := folderStart; folderNum <= folderEnd; folderNum++ {
+		p := tilesByFolder[folderNum]
+		runProcess(folderNum, "count", width, height, numWorkers, p, ProcessOpts{})
+		runProcess(folderNum, "mode", width, height, numWorkers, p, ProcessOpts{IncludeBoring: false})
+	}
+
+	{
+		var paths []string
+		for _, p := range tilesByFolder {
+			paths = append(paths, p)
+		}
+		runWorkers(paths, extractWorkers, func(p string) {
+			deleteTilesFolder(p)
+		})
+	}
+}
+
+func runWorkers[T any](items []T, numWorkers int, fn func(T)) {
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+
+	var wg sync.WaitGroup
+	jobs := make(chan T)
+
+	for i := 0; i < numWorkers; i++ {
+		wg.Go(func() {
+			for it := range jobs {
+				fn(it)
+			}
+		})
+	}
+
+	for _, it := range items {
+		jobs <- it
+	}
+	close(jobs)
+	wg.Wait()
+}
+
+func getTilesFolderPath(wplaceOrTemp string, folderNumber int, singleFolder bool) (tilesFolderPath string) {
+	if singleFolder {
+		tilesFolderPath = fmt.Sprintf("%s/tiles-%d", wplaceOrTemp, folderNumber)
+	} else {
+		tilesFolderPath = fmt.Sprintf("%s/tiles-%d/tiles-%d", wplaceOrTemp, folderNumber, folderNumber)
+	}
+
+	return tilesFolderPath
+}
+
+func extractTiles(tempPath string, folderNumber int) (tilesFolderPath string) {
+	if !exists(tempPath) {
+		fmt.Printf("Creating temp path %s...\n", tempPath)
+		os.Mkdir(tempPath, os.ModePerm)
+	}
+
+	extractFrom := fmt.Sprintf("%s/tiles-%d.7z", wplacePath, folderNumber)
+
+	fmt.Printf("Extracting %s to %s\n", extractFrom, tempPath)
+	sevenZArgs := []string{"x", "-o" + tempPath, extractFrom}
+
+	err := exec.Command("7z", sevenZArgs...).Run()
+
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Done!")
+
+	return fmt.Sprintf("%s/tiles-%d", tempPath, folderNumber)
+}
+
+func deleteTilesFolder(tilesFolderPath string) {
+	fmt.Fprintf(os.Stderr, "Deleting %s...\n", tilesFolderPath)
+	err := os.RemoveAll(tilesFolderPath)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Done!")
+}
+
+func runProcess(folderNumber int, processor string, width, height, numWorkers int, tilesFolderPath string, opts ProcessOpts) {
+	startTime := time.Now()
+
+	if !exists(tilesFolderPath) {
+		fmt.Printf("Folder \"%s\" does not exist!\n", tilesFolderPath)
 		os.Exit(1)
 	}
 
 	jobs := make(chan Job, 1000)
 	results := make(chan Result, 1000)
-	existingFiles := preCheckExistingFiles(basepath, width)
+	existingFiles := preCheckExistingFiles(tilesFolderPath, width)
 
 	var wg sync.WaitGroup
 
 	for range numWorkers {
 		wg.Add(1)
-		go worker(jobs, results, &wg, processor, basepath, opts)
+		go worker(jobs, results, &wg, processor, tilesFolderPath, opts)
 	}
 
 	go func() {
 		defer close(jobs)
 		for x := range width {
 			for y := range height {
-				filepath := fmt.Sprintf("%s/%d/%d.png", basepath, x, y)
+				filepath := fmt.Sprintf("%s/%d/%d.png", tilesFolderPath, x, y)
 				if existingFiles[filepath] {
 					jobs <- Job{x: x, y: y}
 				} else {
@@ -147,7 +251,7 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 		suffix += "-b"
 	}
 
-	fmt.Printf("Processing %d pixels in %s with %d workers doing %s%s...\n", total, basepath, numWorkers, processor, suffix)
+	fmt.Printf("Processing %d pixels in %s with %d workers doing %s%s...\n", total, tilesFolderPath, numWorkers, processor, suffix)
 
 	for result := range results {
 		pixelData[result.x][result.y] = result.rgb
@@ -211,7 +315,9 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 	}
 	defer file.Close()
 
-	if err := png.Encode(file, img); err != nil {
+	encoder := png.Encoder{CompressionLevel: png.BestCompression}
+
+	if err := encoder.Encode(file, img); err != nil {
 		panic(err)
 	}
 
@@ -222,6 +328,7 @@ func runProcess(folderNumber int, processor string, width, height, numWorkers in
 	fmt.Printf("Save took: %v\n", saveTime.Round(time.Millisecond))
 	fmt.Printf("Total time: %v\n", totalTime.Round(time.Millisecond))
 	fmt.Printf("Average: %.2f pixels/second\n", float64(total)/totalTime.Seconds())
+
 }
 
 func exists(basepath string) bool {

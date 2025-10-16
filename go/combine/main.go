@@ -1,12 +1,14 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"image"
 	"image/draw"
 	"image/png"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"sync"
@@ -17,25 +19,71 @@ type Target struct {
 	Y string
 }
 
-const (
-	basePath        = `C:\Users\jazza\Downloads\wplace`
-	startIndex      = 1
-	endIndex        = 166
-	leftX           = 1860
-	rightX          = 1860
-	topY            = 1281
-	bottomY         = 1282
-	deleteOriginals = true
+var (
+	basePath        string
+	startIndex      int
+	endIndex        int
+	leftX           int
+	rightX          int
+	topY            int
+	bottomY         int
+	workers         int
+	deleteOriginals bool
 )
 
 var targets []Target
 
 func init() {
+	flag.StringVar(&basePath, "base", "C:\\Users\\jazza\\Downloads\\wplace", "Path to folder contain tiles-x.7z files")
+	flag.IntVar(&startIndex, "start", 1, "Archive start index")
+	flag.IntVar(&endIndex, "end", -1, "Archive end index. If -1, will be set to parse all archives.")
+	flag.IntVar(&leftX, "left", 1860, "Left tile X")
+	flag.IntVar(&rightX, "right", 1860, "Right tile X")
+	flag.IntVar(&topY, "top", 1281, "Top tile Y")
+	flag.IntVar(&bottomY, "bottom", 1282, "Bottom tile Y")
+	flag.IntVar(&workers, "workers", 24, "Number of images to combine in parallel")
+	flag.BoolVar(&deleteOriginals, "delete", true, "Delete original tiles after combining")
+
+	flag.Parse()
+
+	if endIndex == -1 {
+		endIndex = findEndIndex(basePath)
+	}
+
 	for x := leftX; x <= rightX; x++ {
 		for y := topY; y <= bottomY; y++ {
 			targets = append(targets, Target{X: fmt.Sprint(x), Y: fmt.Sprint(y)})
 		}
 	}
+}
+
+func findEndIndex(basePath string) int {
+	files, err := os.ReadDir(basePath)
+	if err != nil {
+		panic(err)
+	}
+
+	biggest := 0
+
+	for _, f := range files {
+		reg := regexp.MustCompile(`^tiles-(\d+)\.7z$`)
+		matches := reg.FindStringSubmatch(f.Name())
+
+		if len(matches) != 2 {
+			continue
+		}
+
+		i, err := strconv.Atoi(matches[1])
+		if err != nil {
+			panic(err)
+		}
+
+		if i > biggest {
+			biggest = i
+		}
+	}
+
+	return biggest
 }
 
 func main() {
@@ -46,7 +94,6 @@ func main() {
 
 	xVals, yVals := uniqSortedXY(targets)
 
-	workers := 24
 	idxCh := make(chan int)
 	var wg sync.WaitGroup
 	wg.Add(workers)
@@ -202,11 +249,4 @@ func writePNGAtomic(tmpPath, finalPath string, img image.Image) error {
 		return fmt.Errorf("rename %s -> %s: %w", tmpPath, finalPath, err)
 	}
 	return nil
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

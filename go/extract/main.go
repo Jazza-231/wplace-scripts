@@ -1,10 +1,13 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -14,20 +17,37 @@ type Target struct {
 	Y string
 }
 
-const (
-	sevenZipPath = `C:\Program Files\7-Zip\7z.exe`
-	basePath     = `C:\Users\jazza\Downloads\wplace`
-	startIndex   = 1
-	endIndex     = 166
-	leftX        = 1860
-	rightX       = 1860
-	topY         = 1281
-	bottomY      = 1282
+var (
+	sevenZipPath string
+	basePath     string
+	startIndex   int
+	endIndex     int
+	leftX        int
+	rightX       int
+	topY         int
+	bottomY      int
+	workers      int
 )
 
 var targets []Target
 
 func init() {
+	flag.StringVar(&sevenZipPath, "7zip", "C:\\Program Files\\7-Zip\\7z.exe", "Path to 7zip executable")
+	flag.StringVar(&basePath, "base", "C:\\Users\\jazza\\Downloads\\wplace", "Path to folder contain tiles-x.7z files")
+	flag.IntVar(&startIndex, "start", 1, "Archive start index")
+	flag.IntVar(&endIndex, "end", -1, "Archive end index. If -1, will be set to parse all archives.")
+	flag.IntVar(&leftX, "left", 1860, "Left tile X")
+	flag.IntVar(&rightX, "right", 1860, "Right tile X")
+	flag.IntVar(&topY, "top", 1281, "Top tile Y")
+	flag.IntVar(&bottomY, "bottom", 1282, "Bottom tile Y")
+	flag.IntVar(&workers, "workers", 24, "Number of instances of 7z to run in parallel")
+
+	flag.Parse()
+
+	if endIndex == -1 {
+		endIndex = findEndIndex(basePath)
+	}
+
 	for x := leftX; x <= rightX; x++ {
 		for y := topY; y <= bottomY; y++ {
 			targets = append(targets, Target{X: fmt.Sprint(x), Y: fmt.Sprint(y)})
@@ -35,15 +55,43 @@ func init() {
 	}
 }
 
+func findEndIndex(basePath string) int {
+	files, err := os.ReadDir(basePath)
+	if err != nil {
+		panic(err)
+	}
+
+	biggest := 0
+
+	for _, f := range files {
+		reg := regexp.MustCompile(`^tiles-(\d+)\.7z$`)
+		matches := reg.FindStringSubmatch(f.Name())
+
+		if len(matches) != 2 {
+			continue
+		}
+
+		i, err := strconv.Atoi(matches[1])
+		if err != nil {
+			panic(err)
+		}
+
+		if i > biggest {
+			biggest = i
+		}
+	}
+
+	return biggest
+}
+
 func main() {
-	numWorkers := 24
 	numJobs := endIndex - startIndex + 1
 
 	jobs := make(chan int, numJobs)
 	var wg sync.WaitGroup
 	wg.Add(numJobs)
 
-	for range numWorkers {
+	for range workers {
 		go func() {
 			for i := range jobs {
 				worker(i)

@@ -68,7 +68,7 @@ func main() {
 	singleFolder := false
 	extract := false
 	tempPath := os.TempDir()
-	processes := "c m"
+	operations := "c m"
 
 	flag.IntVar(&folderStart, "f", folderStart, "The folder number to start processing at")
 	flag.IntVar(&folderEnd, "l", folderEnd, "The folder number to end processing at. Omit or set to -1 to process only 1 folder")
@@ -77,7 +77,7 @@ func main() {
 	flag.BoolVar(&singleFolder, "s", singleFolder, "Whether the archive is tiles-x.7z/tiles-x or just tiles-x.7z")
 	flag.BoolVar(&extract, "e", extract, "Whether to extract the archive automatically or not")
 	flag.StringVar(&tempPath, "t", tempPath, "The path to the temporary folder to extract the archive to")
-	flag.StringVar(&processes, "p", processes, "The processes: c=count, m=mode, a=average, modifiers: t=transparent, b=boring")
+	flag.StringVar(&operations, "o", operations, "The operations: c=count, m=mode, a=average, modifiers: t=transparent, b=boring")
 	flag.Parse()
 
 	tilesByFolder := make(map[int]string)
@@ -109,13 +109,13 @@ func main() {
 
 	for folderNum := folderStart; folderNum <= folderEnd; folderNum++ {
 		p := tilesByFolder[folderNum]
-		toProcess, err := chooseProcesses(processes)
+		operationFuncs, err := chooseOperations(operations)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		for _, fn := range toProcess {
+		for _, fn := range operationFuncs {
 			fn(folderNum, width, height, numWorkers, p)
 		}
 	}
@@ -132,7 +132,7 @@ func main() {
 }
 
 // This was actually so fun to figure out, idk if I have ever returned functions in code before
-func chooseProcesses(processesString string) ([]func(folderNum, width, height, numWorkers int, p string), error) {
+func chooseOperations(operationsString string) ([]func(folderNum, width, height, numWorkers int, p string), error) {
 	specs := map[string]struct {
 		name string
 		opts ProcessOpts
@@ -144,13 +144,13 @@ func chooseProcesses(processesString string) ([]func(folderNum, width, height, n
 		"at": {"average", ProcessOpts{IncludeBoring: false, IncludeTransparency: true}},
 	}
 
-	tokens := strings.FieldsFunc(processesString, func(r rune) bool { return r == ',' || r == ' ' })
+	tokens := strings.FieldsFunc(operationsString, func(r rune) bool { return r == ',' || r == ' ' })
 
 	functions := make([]func(folderNum, width, height, numWorkers int, p string), 0, len(tokens))
 	for _, t := range tokens {
 		spec, ok := specs[t]
 		if !ok {
-			return nil, fmt.Errorf("unknown process %q", t)
+			return nil, fmt.Errorf("unknown operation %q", t)
 		}
 		name := spec.name
 		opts := spec.opts
@@ -160,7 +160,7 @@ func chooseProcesses(processesString string) ([]func(folderNum, width, height, n
 	}
 
 	if len(functions) == 0 {
-		return nil, errors.New("no processes specified")
+		return nil, errors.New("no operations specified")
 	}
 	return functions, nil
 }

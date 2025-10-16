@@ -68,23 +68,17 @@ func main() {
 	singleFolder := false
 	extract := false
 	tempPath := os.TempDir()
+	operations := "c m"
 
-	start := flag.Int("f", folderStart, "The folder number to start processing at")
-	end := flag.Int("l", folderEnd, "The folder number to end processing at. Omit or set to -1 to process only 1 folder")
-	workers := flag.Int("w", numWorkers, "The number of workers to use")
-	wplace := flag.String("p", wplacePath, "The path to the wplace folder, namely the folder containing the tiles-x folder")
-	single := flag.Bool("s", singleFolder, "Whether the archive is tiles-x.7z/tiles-x or just tiles-x.7z")
-	extracting := flag.Bool("e", extract, "Whether to extract the archive automatically or not")
-	temp := flag.String("t", tempPath, "The path to the temporary folder to extract the archive to")
+	flag.IntVar(&folderStart, "f", folderStart, "The folder number to start processing at")
+	flag.IntVar(&folderEnd, "l", folderEnd, "The folder number to end processing at. Omit or set to -1 to process only 1 folder")
+	flag.IntVar(&numWorkers, "w", numWorkers, "The number of workers to use")
+	flag.StringVar(&wplacePath, "p", wplacePath, "The path to the wplace folder, namely the folder containing the tiles-x folder")
+	flag.BoolVar(&singleFolder, "s", singleFolder, "Whether the archive is tiles-x.7z/tiles-x or just tiles-x.7z")
+	flag.BoolVar(&extract, "e", extract, "Whether to extract the archive automatically or not")
+	flag.StringVar(&tempPath, "t", tempPath, "The path to the temporary folder to extract the archive to")
+	flag.StringVar(&operations, "o", operations, "The operations: c=count, m=mode, a=average, modifiers: t=transparent, b=boring")
 	flag.Parse()
-
-	folderStart = *start
-	folderEnd = *end
-	numWorkers = *workers
-	wplacePath = *wplace
-	singleFolder = *single
-	extract = *extracting
-	tempPath = *temp
 
 	tilesByFolder := make(map[int]string)
 	extractWorkers := 8
@@ -115,8 +109,15 @@ func main() {
 
 	for folderNum := folderStart; folderNum <= folderEnd; folderNum++ {
 		p := tilesByFolder[folderNum]
-		runProcess(folderNum, "count", width, height, numWorkers, p, ProcessOpts{})
-		runProcess(folderNum, "mode", width, height, numWorkers, p, ProcessOpts{IncludeBoring: false})
+		operationFuncs, err := chooseOperations(operations)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		for _, fn := range operationFuncs {
+			fn(folderNum, width, height, numWorkers, p)
+		}
 	}
 
 	{
@@ -124,10 +125,47 @@ func main() {
 		for _, p := range tilesByFolder {
 			paths = append(paths, p)
 		}
-		runWorkers(paths, extractWorkers, func(p string) {
-			deleteTilesFolder(p)
+
+		if extract {
+			runWorkers(paths, extractWorkers, func(p string) {
+				deleteTilesFolder(p)
+			})
+		}
+	}
+}
+
+// This was actually so fun to figure out, idk if I have ever returned functions in code before
+func chooseOperations(operationsString string) ([]func(folderNum, width, height, numWorkers int, p string), error) {
+	specs := map[string]struct {
+		name string
+		opts ProcessOpts
+	}{
+		"c":  {"count", ProcessOpts{IncludeBoring: false, IncludeTransparency: false}},
+		"m":  {"mode", ProcessOpts{IncludeBoring: false, IncludeTransparency: false}},
+		"a":  {"average", ProcessOpts{IncludeBoring: false, IncludeTransparency: false}},
+		"mb": {"mode", ProcessOpts{IncludeBoring: true, IncludeTransparency: false}},
+		"at": {"average", ProcessOpts{IncludeBoring: false, IncludeTransparency: true}},
+	}
+
+	tokens := strings.FieldsFunc(operationsString, func(r rune) bool { return r == ',' || r == ' ' })
+
+	functions := make([]func(folderNum, width, height, numWorkers int, p string), 0, len(tokens))
+	for _, t := range tokens {
+		spec, ok := specs[t]
+		if !ok {
+			return nil, fmt.Errorf("unknown operation %q", t)
+		}
+		name := spec.name
+		opts := spec.opts
+		functions = append(functions, func(folderNum, width, height, numWorkers int, p string) {
+			runProcess(folderNum, name, width, height, numWorkers, p, opts)
 		})
 	}
+
+	if len(functions) == 0 {
+		return nil, errors.New("no operations specified")
+	}
+	return functions, nil
 }
 
 func runWorkers[T any](items []T, numWorkers int, fn func(T)) {

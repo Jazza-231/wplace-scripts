@@ -125,9 +125,12 @@ func main() {
 		for _, p := range tilesByFolder {
 			paths = append(paths, p)
 		}
-		runWorkers(paths, extractWorkers, func(p string) {
-			deleteTilesFolder(p)
-		})
+
+		if extract {
+			runWorkers(paths, extractWorkers, func(p string) {
+				deleteTilesFolder(p)
+			})
+		}
 	}
 }
 

@@ -8,7 +8,7 @@ import { Readable } from "stream";
 import { configDotenv } from "dotenv";
 import { DEFAULT_CONFIG } from "./config";
 
-configDotenv({ quiet: true });
+configDotenv({ quiet: true, path: "../.env" });
 
 /* -------------------- GLOBALS -------------------- */
 // This WAS a real hardcoded URL, but it's now in my .env, and it has been re-rolled, so git history won't leak a working URL
@@ -26,7 +26,7 @@ if (!(WP_WPLACE_PATH && WP_CONCURRENT)) {
 }
 
 const wPlacePath = WP_WPLACE_PATH;
-const wPlaceURL = "https://backend.wplace.live/files/s0/tiles/{x}/{y}.png";
+const wPlaceURL = "https://openplace.live/files/s0/tiles/{x}/{y}.png";
 
 const argsArr = process.argv.slice(2);
 

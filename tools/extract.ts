@@ -43,10 +43,10 @@ class Options {
 		this.global = {
 			startIndex: 1,
 			endIndex: -1,
-			leftX: 0,
-			rightX: 1,
-			topY: 0,
-			bottomY: 1,
+			leftX: 1714,
+			rightX: 1715,
+			topY: 942,
+			bottomY: 943,
 			workers: 24,
 			basePath: "C:/Users/jazza/Downloads/wplace",
 		};

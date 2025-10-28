@@ -12,8 +12,8 @@ configDotenv({ quiet: true });
 
 /* -------------------- GLOBALS -------------------- */
 // This WAS a real hardcoded URL, but it's now in my .env, and it has been re-rolled, so git history won't leak a working URL
-const proxyListURL = process.env.PROXY_LIST_URL;
-if (!proxyListURL) throw new Error("PROXY_LIST_URL not set");
+// const proxyListURL = process.env.PROXY_LIST_URL;
+// if (!proxyListURL) throw new Error("PROXY_LIST_URL not set");
 
 const WP_WPLACE_PATH = process.env.WP_WPLACE_PATH;
 const WP_CONCURRENT = process.env.WP_CONCURRENT;
@@ -116,38 +116,38 @@ async function fetchWithRetry(url: string, maxRetries = 10): Promise<Response> {
 	throw new Error("All retry attempts failed");
 }
 
-const proxyRequest = await fetchWithRetry(proxyListURL);
-const proxyText = (await proxyRequest.text()).trim();
+// const proxyRequest = await fetchWithRetry(proxyListURL);
+// const proxyText = (await proxyRequest.text()).trim();
 
-let proxyRequestList = proxyText
-	.split("\r\n")
-	.map((proxy) => proxy.split(":"))
-	.map((proxy) => {
-		let [ip, port, username, password] = proxy;
+// let proxyRequestList = proxyText
+// 	.split("\r\n")
+// 	.map((proxy) => proxy.split(":"))
+// 	.map((proxy) => {
+// 		let [ip, port, username, password] = proxy;
 
-		return {
-			ip,
-			port,
-			username,
-			password,
-		};
-	});
+// 		return {
+// 			ip,
+// 			port,
+// 			username,
+// 			password,
+// 		};
+// 	});
 
 const proxyURLTemplate = "http://{username}:{password}@{ip}:{port}";
 
-const proxies = proxyRequestList.map((proxy) => {
-	return proxyURLTemplate
-		.replace("{username}", proxy.username)
-		.replace("{password}", proxy.password)
-		.replace("{ip}", proxy.ip)
-		.replace("{port}", proxy.port);
-});
+// const proxies = proxyRequestList.map((proxy) => {
+// 	return proxyURLTemplate
+// 		.replace("{username}", proxy.username)
+// 		.replace("{password}", proxy.password)
+// 		.replace("{ip}", proxy.ip)
+// 		.replace("{port}", proxy.port);
+// });
 
-const numberOfProxies = proxies.length;
+// const numberOfProxies = proxies.length;
 
-writeCreate(path.join(wPlacePath, "logs", "proxies.json"), JSON.stringify(proxies));
+// writeCreate(path.join(wPlacePath, "logs", "proxies.json"), JSON.stringify(proxies));
 
-console.log(`Fetched ${numberOfProxies} proxies`);
+// console.log(`Fetched ${numberOfProxies} proxies`);
 
 const agentByProxy = new Map<string, ProxyAgent>();
 
@@ -170,10 +170,10 @@ function getAgent(proxyURI: string) {
 }
 
 /* -------------------- HELPERS -------------------- */
-let proxyIdx = 0;
-function getNextProxy() {
-	return proxies[proxyIdx++ % proxies.length];
-}
+// let proxyIdx = 0;
+// function getNextProxy() {
+// 	return proxies[proxyIdx++ % proxies.length];
+// }
 
 function pathFromCoords(coords: { x: number; y: number }) {
 	return {
@@ -250,12 +250,12 @@ const limiter = new Bottleneck({
 
 function downloadURL(url: string): Promise<{ code: number; body?: Readable }> {
 	return new Promise((resolve, reject) => {
-		const proxy = getNextProxy();
-		const proxyAgent = getAgent(proxy);
+		// const proxy = getNextProxy();
+		// const proxyAgent = getAgent(proxy);
 
 		const t0 = Date.now();
 
-		request(url, { dispatcher: proxyAgent, headersTimeout: 0.5 * MINUTE, bodyTimeout: MINUTE })
+		request(url, { headersTimeout: 0.5 * MINUTE, bodyTimeout: MINUTE })
 			.then(async (response) => {
 				const code = response.statusCode;
 
@@ -265,7 +265,7 @@ function downloadURL(url: string): Promise<{ code: number; body?: Readable }> {
 				latencyBuckets[b] = (latencyBuckets[b] ?? 0) + 1;
 				statusCounts[code] = (statusCounts[code] ?? 0) + 1;
 
-				bump(proxy, code);
+				// bump(proxy, code);
 
 				switch (code) {
 					case 200:

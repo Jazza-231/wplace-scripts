@@ -43,10 +43,10 @@ class Options {
 		this.global = {
 			startIndex: 1,
 			endIndex: -1,
-			leftX: 0,
-			rightX: 1,
-			topY: 0,
-			bottomY: 1,
+			leftX: 805,
+			rightX: 806,
+			topY: 1096,
+			bottomY: 1097,
 			workers: 24,
 			basePath: "C:/Users/jazza/Downloads/wplace",
 		};
@@ -69,7 +69,7 @@ class Options {
 			fps: 20,
 			x: this.global.leftX,
 			y: this.global.bottomY,
-			startIndex: 0 || this.global.startIndex,
+			startIndex: 1 || this.global.startIndex,
 		};
 	}
 }
@@ -173,12 +173,28 @@ function askQuestion(query: string): Promise<string> {
 	);
 }
 
-const left = await askQuestion("Crop rectangle left: ").then((v) => parseInt(v));
-const top = await askQuestion("Crop rectangle top: ").then((v) => parseInt(v));
-const right = await askQuestion("Crop rectangle right: ").then((v) => parseInt(v));
-const bottom = await askQuestion("Crop rectangle bottom: ").then((v) => parseInt(v));
+let left = 0,
+	top = 0,
+	bottom = 0,
+	right = 0;
 
-await spawnChild("go", massCrop, ["run", "main.go", ...massCropArgs({ left, top, right, bottom })]);
+left = await askQuestion("Crop rectangle left (Leave blank to skip): ").then((v) => parseInt(v));
+
+if (Number.isNaN(left)) {
+	console.log("Skipping crop");
+} else {
+	top = await askQuestion("Crop rectangle top: ").then((v) => parseInt(v));
+	right = await askQuestion("Crop rectangle right: ").then((v) => parseInt(v));
+	bottom = await askQuestion("Crop rectangle bottom: ").then((v) => parseInt(v));
+}
+
+if (!Number.isNaN(left)) {
+	await spawnChild("go", massCrop, [
+		"run",
+		"main.go",
+		...massCropArgs({ left, top, right, bottom }),
+	]);
+}
 
 const startIndex = await askQuestion("Start index: ").then((v) => parseInt(v));
 function gifArgs(startIndex: number) {
@@ -195,5 +211,5 @@ await spawnChild("pwsh", ".", [
 	"Bypass",
 	"-File",
 	gif,
-	...gifArgs(startIndex),
+	...gifArgs(Number.isNaN(startIndex) ? options.gif.startIndex : startIndex),
 ]);
